@@ -131,6 +131,44 @@
   .toggle:hover { background: #f9fafb; }
   .toggle input { margin: 0; accent-color: var(--accent); }
   .toggle.on { color: var(--text); }
+
+  .hint-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 6px 3px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    white-space: nowrap;
+  }
+  .hint-box .label { color: var(--muted); font-size: 12px; }
+  .hint-box select {
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: #f3f4f6;
+    font-size: 12px;
+  }
+  .hint-box.active { border-color: #bfdbfe; background: var(--accent-soft); }
+  .hint-box.active .label { color: #1d4ed8; font-weight: 600; }
+  .hint-box.active select { background: #fff; border-color: #dbeafe; }
+  .badge.hint { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+  .sp-base {
+    display: block;
+    margin-top: -1px;
+    color: #9ca3af;
+    font-size: 9.5px;
+    line-height: 1.2;
+    text-decoration: line-through;
+  }
+  .hint-select {
+    padding: 2px 5px;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    background: #fff;
+    font-size: 11px;
+  }
   .btn {
     padding: 8px 12px;
     border: 1px solid var(--line);
@@ -584,6 +622,17 @@
           <label class="toggle" id="onlyPurchasable-wrap"><input type="checkbox" id="onlyPurchasable"> SP取得可のみ</label>
           <label class="toggle" id="includeNegative-wrap"><input type="checkbox" id="includeNegative"> マイナス系を含む</label>
           <label class="toggle" id="onlySelected-wrap"><input type="checkbox" id="onlySelected"> 選択中のみ</label>
+          <label class="hint-box" id="hintBox" title="全スキル共通のヒントLv。スキル個別の設定は「詳細」から変更できます。">
+            <span class="label">ヒントLv</span>
+            <select id="hintLevel">
+              <option value="0">Lv0（なし）</option>
+              <option value="1">Lv1 −10%</option>
+              <option value="2">Lv2 −20%</option>
+              <option value="3">Lv3 −30%</option>
+              <option value="4">Lv4 −35%</option>
+              <option value="5">Lv5 −40%</option>
+            </select>
+          </label>
         </div>
         <div class="chips" id="typeChips"></div>
       </div>
@@ -641,7 +690,10 @@
           <li>同じグループのスキルを複数選択した場合、<b>最も上位（<code>group_rate</code> が最大）の1つだけ</b>を合計に加算します。下位スキルは「集計外」と表示されます。</li>
           <li><b>固有</b>・<b>進化</b>はSPでは取得できませんが、評価点は合計に加算されます（合計SPには含まれません）。</li>
           <li><b>マイナス系</b>（<code>group_rate = -1</code> または評価点が負）は初期状態では非表示です。必要に応じて「マイナス系を含む」をオンにしてください。</li>
-          <li>スキル適性による評価点倍率、固有スキルのレベル補正、ヒントLvによるSP割引は<b>未適用</b>です。ゲーム内の実際の査定値とは異なります。</li>
+          <li><b>ヒントLv</b>は画面上部で全スキル共通のLvを選べます。スキルごとに変えたい場合は、各行の「詳細」を開いて個別に設定してください（個別設定が共通設定より優先されます）。</li>
+          <li>ヒントLvによるSP減少率は <b>Lv1 −10% / Lv2 −20% / Lv3 −30% / Lv4 −35% / Lv5 −40%</b> です。割引後のSPはスキルごとに<b>小数点以下切り捨て</b>で計算します（例: 170SPのLv4 → 110SP）。</li>
+          <li>上位スキルの「下位込みSP」は、下位スキルそれぞれのヒントLvで割引したSPを合計します。下位スキルに個別設定がなければ共通のヒントLvが適用されます。</li>
+          <li>スキル適性による評価点倍率、固有スキルのレベル補正、切れ者補正は<b>未適用</b>です。ゲーム内の実際の査定値とは異なります。</li>
           <li>特殊スキル（ストーリー・イベント用）と期限切れスキルは収録していません。データは <code>extract_skills.py</code> で再生成できます。</li>
         </ul>
       </div>
@@ -701,8 +753,38 @@
     };
     const TYPE_RANK = new Map(TYPE_ORDER.map((t, i) => [t, i]));
 
+    // ヒントLvごとのSP減少率（ゲーム内仕様）
+    const HINT_DISCOUNTS = { 0: 0, 1: 0.10, 2: 0.20, 3: 0.30, 4: 0.35, 5: 0.40 };
+    const HINT_KEY = 'uma-skill-eval:hint:v1';
+    const DERIVED_KEYS = {
+      sp: '_sp',
+      total_sp: '_total_sp',
+      efficiency: '_efficiency',
+      total_efficiency: '_total_efficiency',
+    };
+
     const $ = (id) => document.getElementById(id);
     const byId = new Map(SKILLS.map((s) => [s.skill_id, s]));
+
+    // 下位スキル連鎖（同じ group_id の下位 group_rate。rate ごとの代表は評価点最大）
+    const REPRESENTATIVE = new Map();
+    for (const s of SKILLS) {
+      if (s.group_rate < 1) continue;
+      const key = `${s.group_id}:${s.group_rate}`;
+      const cur = REPRESENTATIVE.get(key);
+      if (!cur || s.eval_point > cur.eval_point) REPRESENTATIVE.set(key, s);
+    }
+    const CHAINS = new Map();
+    for (const s of SKILLS) {
+      const chain = [];
+      if (s.group_rate >= 1) {
+        for (let rate = 1; rate < s.group_rate; rate++) {
+          const lower = REPRESENTATIVE.get(`${s.group_id}:${rate}`);
+          if (lower && lower.sp != null) chain.push(lower);
+        }
+      }
+      CHAINS.set(s.skill_id, chain);
+    }
 
     const state = {
       query: '',
@@ -717,6 +799,8 @@
       pageSize: 100,
       selected: new Set(),
       expanded: new Set(),
+      hintLevel: 0,
+      hintOverrides: new Map(),
     };
 
     function escapeHtml(value) {
@@ -763,6 +847,76 @@
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify([...state.selected]));
       } catch (err) { /* ignore */ }
+    }
+
+    // ヒントLv設定を復元
+    try {
+      const raw = localStorage.getItem(HINT_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        const def = Number(saved.default);
+        if (Number.isInteger(def) && def >= 0 && def <= 5) state.hintLevel = def;
+        if (saved.overrides && typeof saved.overrides === 'object') {
+          for (const [id, lv] of Object.entries(saved.overrides)) {
+            const skillId = Number(id);
+            const level = Number(lv);
+            if (byId.has(skillId) && Number.isInteger(level) && level >= 0 && level <= 5) {
+              state.hintOverrides.set(skillId, level);
+            }
+          }
+        }
+      }
+    } catch (err) { /* ignore */ }
+
+    function saveHint() {
+      try {
+        localStorage.setItem(HINT_KEY, JSON.stringify({
+          default: state.hintLevel,
+          overrides: Object.fromEntries(state.hintOverrides),
+        }));
+      } catch (err) { /* ignore */ }
+    }
+
+    function discountPct(level) {
+      return Math.round((HINT_DISCOUNTS[level] || 0) * 100);
+    }
+
+    function effectiveHint(skillId) {
+      return state.hintOverrides.has(skillId)
+        ? state.hintOverrides.get(skillId)
+        : state.hintLevel;
+    }
+
+    // ゲーム内と同じく、割引後のSPは小数点以下切り捨て
+    function applyHintDiscount(sp, level) {
+      if (sp == null) return null;
+      const discount = HINT_DISCOUNTS[level] || 0;
+      return Math.max(0, Math.floor(sp * (1 - discount) + 1e-9));
+    }
+
+    // ヒントLvを反映したSP・効率を各スキルに持たせる
+    function recomputeDerived() {
+      for (const s of SKILLS) {
+        const hint = effectiveHint(s.skill_id);
+        const sp = applyHintDiscount(s.sp, hint);
+        let prereqSp = 0;
+        for (const lower of CHAINS.get(s.skill_id) || []) {
+          prereqSp += applyHintDiscount(lower.sp, effectiveHint(lower.skill_id)) || 0;
+        }
+        const totalSp = s.sp == null ? null : sp + prereqSp;
+        s._hint = hint;
+        s._sp = sp;
+        s._total_sp = totalSp;
+        s._prereq_sp = s.sp == null ? 0 : prereqSp;
+        s._efficiency = sp != null && sp > 0 ? s.upgrade_point / sp : null;
+        s._total_efficiency = totalSp != null && totalSp > 0 ? s.eval_point / totalSp : null;
+      }
+    }
+
+    function updateHintBox() {
+      const box = $('hintBox');
+      if (!box) return;
+      box.classList.toggle('active', state.hintLevel > 0);
     }
 
     function initMeta() {
@@ -852,8 +1006,9 @@
         r = (TYPE_RANK.get(a.type) ?? 99) - (TYPE_RANK.get(b.type) ?? 99);
         if (r === 0) r = a.name.localeCompare(b.name, 'ja');
       } else {
-        const av = a[key];
-        const bv = b[key];
+        const dkey = DERIVED_KEYS[key] || key;
+        const av = a[dkey];
+        const bv = b[dkey];
         if (av == null && bv == null) r = 0;
         else if (av == null) r = 1;
         else if (bv == null) r = -1;
@@ -883,11 +1038,13 @@
       const countedSet = new Set(counted.map((s) => s.skill_id));
       let evalTotal = 0;
       let spTotal = 0;
+      let spBaseTotal = 0;
       let evalNoSp = 0;
       for (const s of counted) {
         evalTotal += Number(s.eval_point) || 0;
-        if (s.total_sp != null) spTotal += Number(s.total_sp) || 0;
+        if (s._total_sp != null) spTotal += Number(s._total_sp) || 0;
         else evalNoSp += Number(s.eval_point) || 0;
+        if (s.total_sp != null) spBaseTotal += Number(s.total_sp) || 0;
       }
       const overridden = selected.filter((s) => !countedSet.has(s.skill_id));
       return {
@@ -896,6 +1053,7 @@
         overridden,
         evalTotal,
         spTotal,
+        spBaseTotal,
         evalNoSp,
         efficiency: spTotal > 0 ? evalTotal / spTotal : null,
       };
@@ -916,17 +1074,29 @@
         eff.classList.remove('na');
       }
       const note = $('cartNote');
+      const overrideCount = state.hintOverrides.size;
+      const hintBits = [];
+      if (state.hintLevel > 0) {
+        hintBits.push(`共通ヒントLv${state.hintLevel}（−${discountPct(state.hintLevel)}%）`);
+      }
+      if (overrideCount) hintBits.push(`個別設定 ${formatNumber(overrideCount)} 件`);
+      const hintText = hintBits.length ? `${hintBits.join(' / ')}適用中。` : '';
+      const savedText = hintText && sum.spBaseTotal > sum.spTotal
+        ? ` 割引前 ${formatNumber(sum.spBaseTotal)} SP → ${formatNumber(sum.spTotal)} SP。`
+        : '';
       if (!sum.selected.length) {
         note.innerHTML = 'スキルを選択すると、合計評価点・合計SP・総合効率を計算します。';
       } else if (sum.overridden.length) {
         note.innerHTML =
           `<span class="warn">同一グループの下位 ${formatNumber(sum.overridden.length)} 件は集計外</span>` +
           `（集計対象 ${formatNumber(sum.counted.length)} 件）。` +
-          `上位スキルを選択すると、下位スキルのSPを含めて計算されます。`;
+          `上位スキルを選択すると、下位スキルのSPを含めて計算されます。` +
+          escapeHtml(hintText + savedText);
       } else {
         note.textContent =
           `選択 ${formatNumber(sum.selected.length)} 件を集計。` +
-          (sum.evalNoSp ? ` SP対象外の評価点 ${formatNumber(sum.evalNoSp)} を含みます。` : '');
+          (sum.evalNoSp ? ` SP対象外の評価点 ${formatNumber(sum.evalNoSp)} を含みます。` : '') +
+          hintText + savedText;
       }
       $('btnClear').disabled = sum.selected.length === 0;
       $('btnCsv').disabled = sum.counted.length === 0;
@@ -957,6 +1127,9 @@
       if (s.total_sp == null) {
         badges.push('<span class="badge nosp">SP対象外</span>');
       }
+      if (state.hintOverrides.has(id)) {
+        badges.push(`<span class="badge hint">ヒントLv${s._hint}・個別</span>`);
+      }
       if (overridden) {
         badges.push('<span class="badge overridden">集計外</span>');
       }
@@ -965,16 +1138,28 @@
         `${open ? '詳細を閉じる' : '詳細'}</button>`
       );
 
-      const sp = s.sp == null ? '<span class="na">—</span>' : formatNumber(s.sp);
-      const upgrade = s.upgrade_point == null ? '<span class="na">—</span>' : formatNumber(s.upgrade_point);
-      const effort = s.efficiency == null ? '<span class="na">—</span>' : s.efficiency.toFixed(2);
-      const totalSp = s.total_sp == null
+      const sp = s.sp == null
         ? '<span class="na">—</span>'
-        : formatNumber(s.total_sp);
-      const totalEffort = s.total_efficiency == null ? '<span class="na">—</span>' : s.total_efficiency.toFixed(2);
+        : (s._hint > 0
+            ? `${formatNumber(s._sp)}<span class="sp-base">${formatNumber(s.sp)}</span>`
+            : formatNumber(s.sp));
+      const spTitle = s.sp == null
+        ? 'SP対象外'
+        : (s._hint > 0
+            ? `ヒントLv${s._hint}（−${discountPct(s._hint)}%）: ${formatNumber(s.sp)} → ${formatNumber(s._sp)} SP`
+            : `${formatNumber(s.sp)} SP`);
+      const upgrade = s.upgrade_point == null ? '<span class="na">—</span>' : formatNumber(s.upgrade_point);
+      const effort = s._efficiency == null ? '<span class="na">—</span>' : s._efficiency.toFixed(2);
+      const totalSp = s._total_sp == null
+        ? '<span class="na">—</span>'
+        : formatNumber(s._total_sp);
+      const totalEffort = s._total_efficiency == null ? '<span class="na">—</span>' : s._total_efficiency.toFixed(2);
       const totalSpTitle = s.total_sp == null
         ? 'SP対象外'
-        : (s.prereq_sp > 0 ? `下位込み（内訳: 下位 ${formatNumber(s.prereq_sp)} + このスキル ${formatNumber(s.sp || 0)}）` : `${formatNumber(s.total_sp)}`);
+        : (s.prereq_sp > 0
+            ? `下位込み（内訳: 下位 ${formatNumber(s._prereq_sp)} + このスキル ${formatNumber(s._sp || 0)}）` +
+              (s._hint > 0 ? ` / 割引前 ${formatNumber(s.total_sp)}` : '')
+            : `${formatNumber(s._total_sp)}` + (s._hint > 0 ? ` / 割引前 ${formatNumber(s.total_sp)}` : ''));
       const desc = s._descOneLine ? escapeHtml(s._descOneLine) : '<span class="na">説明なし</span>';
       const descShort = s._descOneLine
         ? (s._descOneLine.length > 56 ? escapeHtml(s._descOneLine.slice(0, 56)) + '…' : escapeHtml(s._descOneLine))
@@ -989,11 +1174,11 @@
             `<div class="skill-sub">${badges.join('')}</div>` +
           `</td>` +
           `<td class="num col-eval${s.eval_point < 0 ? ' neg' : ''}">${formatNumber(s.eval_point)}</td>` +
-          `<td class="num col-sp">${sp}</td>` +
+          `<td class="num col-sp" title="${escapeHtml(spTitle)}">${sp}</td>` +
           `<td class="num col-upgrade">${upgrade}</td>` +
-          `<td class="num col-eff ${effClass(s.efficiency)}">${effort}</td>` +
+          `<td class="num col-eff ${effClass(s._efficiency)}">${effort}</td>` +
           `<td class="num col-totalsp" title="${escapeHtml(totalSpTitle)}">${totalSp}</td>` +
-          `<td class="num col-toteff ${effClass(s.total_efficiency)}">${totalEffort}</td>` +
+          `<td class="num col-toteff ${effClass(s._total_efficiency)}">${totalEffort}</td>` +
           `<td class="col-desc"><span class="desc-text" title="${desc}">${descShort}</span></td>` +
         `</tr>`
       );
@@ -1001,6 +1186,19 @@
         const fullDesc = s.description
           ? escapeHtml(s.description).replace(/\n/g, '<br>')
           : '<span class="na">説明なし</span>';
+        const ownHint = state.hintOverrides.has(id);
+        const hintOptions = [
+          `<option value=""${ownHint ? '' : ' selected'}>共通設定（Lv${state.hintLevel}）</option>`,
+          ...[0, 1, 2, 3, 4, 5].map((lv) => {
+            const label = lv === 0 ? 'Lv0（なし）' : `Lv${lv}（−${discountPct(lv)}%）`;
+            return `<option value="${lv}"${ownHint && s._hint === lv ? ' selected' : ''}>${label}</option>`;
+          }),
+        ].join('');
+        const discountedSp = s._sp == null ? '' : formatNumber(s._sp);
+        const discountedTotal = s._total_sp == null ? '' : formatNumber(s._total_sp);
+        const hintNote = s.sp != null && s._hint > 0
+          ? `（元 ${formatNumber(s.sp)} / −${discountPct(s._hint)}%）`
+          : '';
         rows.push(
           `<tr class="detail-row"><td colspan="9">` +
             `<div class="detail-desc">${fullDesc}</div>` +
@@ -1008,8 +1206,11 @@
               `<span>ID <b>${s.skill_id}</b></span>` +
               `<span>グループ <b>${s.group_id}</b>（rate ${s.group_rate}）</span>` +
               `<span>カテゴリ <b>${escapeHtml(s.category_label)}</b></span>` +
+              `<span>ヒントLv <select class="hint-select" data-hint-id="${id}" aria-label="${escapeHtml(s.name)} のヒントLv">${hintOptions}</select></span>` +
+              `<span>割引後SP <b>${discountedSp || '—'}</b>${hintNote}</span>` +
+              `<span>下位込み割引後SP <b>${discountedTotal || '—'}</b></span>` +
               `<span>下位評価点 <b>${formatNumber(s.prereq_eval)}</b></span>` +
-              `<span>下位SP <b>${formatNumber(s.prereq_sp)}</b></span>` +
+              `<span>下位SP（割引前） <b>${formatNumber(s.prereq_sp)}</b></span>` +
               `<span>上昇評価点 <b>${formatNumber(s.upgrade_point)}</b></span>` +
             `</div>` +
           `</td></tr>`
@@ -1128,14 +1329,28 @@
         a.group_id - b.group_id || a.group_rate - b.group_rate || a.skill_id - b.skill_id
       );
       const header = [
-        'skill_id', 'name', 'type', 'rarity', 'eval_point', 'sp',
-        'upgrade_point', 'efficiency', 'total_sp', 'total_efficiency',
-        'group_id', 'group_rate', 'prereq_sp', 'prereq_eval',
+        'skill_id', 'name', 'type', 'rarity', 'eval_point',
+        'sp_base', 'hint_level', 'sp',
+        'upgrade_point', 'efficiency',
+        'total_sp_base', 'total_sp', 'total_efficiency',
+        'group_id', 'group_rate', 'prereq_sp_base', 'prereq_sp', 'prereq_eval',
         'category', 'category_label', 'description',
       ];
       const lines = [header.join(',')];
       for (const s of rows) {
-        lines.push(header.map((k) => csvCell(s[k])).join(','));
+        const out = {
+          ...s,
+          sp_base: s.sp,
+          hint_level: s._hint,
+          sp: s._sp,
+          efficiency: s._efficiency == null ? null : Math.round(s._efficiency * 1000) / 1000,
+          total_sp_base: s.total_sp,
+          total_sp: s._total_sp,
+          total_efficiency: s._total_efficiency == null ? null : Math.round(s._total_efficiency * 1000) / 1000,
+          prereq_sp_base: s.prereq_sp,
+          prereq_sp: s._prereq_sp,
+        };
+        lines.push(header.map((k) => csvCell(out[k])).join(','));
       }
       const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
       const url = URL.createObjectURL(blob);
@@ -1179,6 +1394,14 @@
         state.sortKey = key;
         state.sortDir = dir;
         state.page = 1;
+        render();
+      });
+
+      $('hintLevel').addEventListener('change', (e) => {
+        state.hintLevel = Number(e.target.value) || 0;
+        saveHint();
+        recomputeDerived();
+        updateHintBox();
         render();
       });
 
@@ -1237,6 +1460,16 @@
       });
 
       $('tbody').addEventListener('change', (e) => {
+        const hintSel = e.target.closest('select[data-hint-id]');
+        if (hintSel) {
+          const id = Number(hintSel.dataset.hintId);
+          if (hintSel.value === '') state.hintOverrides.delete(id);
+          else state.hintOverrides.set(id, Number(hintSel.value));
+          saveHint();
+          recomputeDerived();
+          render();
+          return;
+        }
         const cb = e.target.closest('input[type="checkbox"][data-id]');
         if (!cb) return;
         toggleSkill(Number(cb.dataset.id));
@@ -1286,6 +1519,9 @@
       initMeta();
       initCategory();
       renderTypeChips();
+      $('hintLevel').value = String(state.hintLevel);
+      updateHintBox();
+      recomputeDerived();
       bind();
       updateStickyOffset();
       render();
