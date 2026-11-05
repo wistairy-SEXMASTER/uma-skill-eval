@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ウマ娘 スキル評価点 査定</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #2563eb;
+    --accent-soft: #eff6ff;
+    --green: #047857;
+    --red: #b91c1c;
+    --gold: #b45309;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .10);
+    --controls-h: 118px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Yu Gothic UI", "Hiragino Sans", Meiryo, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    padding-bottom: 112px;
+  }
+  button, input, select { font: inherit; }
+  button { color: inherit; }
+
+  /* ---------- header ---------- */
+  .topline {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 18px 20px 12px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 20px;
+    line-height: 1.25;
+    letter-spacing: .01em;
+  }
+  h1 .sub {
+    display: block;
+    margin-top: 3px;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: .02em;
+  }
+  .meta {
+    color: var(--muted);
+    font-size: 11.5px;
+    line-height: 1.5;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .controls {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(255, 255, 255, .97);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 2px 10px rgba(16, 24, 40, .05);
+    backdrop-filter: blur(8px);
+  }
+  .controls-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 10px 20px 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .search-box {
+    flex: 1 1 320px;
+    min-width: 220px;
+  }
+  .search-box input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text);
+    outline: none;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .search-box input:focus {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+  }
+  select {
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--muted);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle:hover { background: #f9fafb; }
+  .toggle input { margin: 0; accent-color: var(--accent); }
+  .toggle.on { color: var(--text); }
+  .btn {
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:hover { background: #f9fafb; }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn.primary:hover { background: #1d4ed8; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+  }
+  .chip:hover { background: #f9fafb; }
+  .chip.active {
+    background: var(--accent-soft);
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    font-weight: 600;
+  }
+  .chip .n {
+    font-size: 10.5px;
+    font-weight: 500;
+    opacity: .7;
+    font-variant-numeric: tabular-nums;
+  }
+  .chip-all {
+    border-color: #cbd5e1;
+    color: #334155;
+    font-weight: 600;
+  }
+
+  /* ---------- table ---------- */
+  .result-bar {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 11px 20px 6px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .result-bar strong { color: var(--text); font-size: 13px; }
+  .result-bar .hint { color: #9ca3af; }
+
+  .table-wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 20px 8px;
+  }
+  table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  thead th:first-child { border-top-left-radius: 9px; }
+  thead th:last-child { border-top-right-radius: 9px; }
+  tbody tr:last-child td:first-child { border-bottom-left-radius: 9px; }
+  tbody tr:last-child td:last-child { border-bottom-right-radius: 9px; }
+  thead th {
+    position: sticky;
+    top: var(--controls-h);
+    z-index: 10;
+    padding: 9px 8px;
+    background: #f9fafb;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    user-select: none;
+  }
+  thead th.sortable { cursor: pointer; }
+  thead th.sortable:hover { color: var(--text); background: #f3f4f6; }
+  thead th.num { text-align: right; }
+  thead th .arrow { color: var(--accent); font-size: 10px; }
+
+  tbody td {
+    padding: 8px;
+    border-bottom: 1px solid #f1f2f4;
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .col-check { width: 38px; text-align: center; }
+  .col-name { width: 29%; }
+  .col-eval { width: 70px; }
+  .col-sp { width: 60px; }
+  .col-upgrade { width: 82px; }
+  .col-eff { width: 76px; }
+  .col-totalsp { width: 88px; }
+  .col-toteff { width: 84px; }
+  .col-desc { width: auto; }
+  th.col-check { padding-left: 10px; padding-right: 4px; }
+  td.col-check { padding-left: 10px; padding-right: 4px; }
+  td.col-check input { margin: 0; accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+  .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  tbody tr.skill-row { cursor: pointer; }
+  tbody tr.skill-row:hover { background: #fafbfc; }
+  tbody tr.skill-row.selected { background: var(--accent-soft); }
+  tbody tr.skill-row.selected:hover { background: #e8f1ff; }
+  tbody tr.skill-row.overridden,
+  tbody tr.skill-row.overridden:hover { background: #fff7ed; }
+
+  .skill-name {
+    font-weight: 600;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .skill-sub {
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .badge {
+    display: inline-block;
+    padding: 0 6px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 10px;
+    line-height: 1.6;
+    white-space: nowrap;
+  }
+  .type-normal { background: #f3f4f6; color: #4b5563; }
+  .type-rare { background: #eff6ff; color: #1d4ed8; }
+  .type-unique { background: #fffbeb; color: var(--gold); border-color: #fde68a; }
+  .type-inherit { background: #f5f3ff; color: #6d28d9; }
+  .type-evolution { background: #fdf2f8; color: #be185d; }
+  .type-special { background: #f0fdf4; color: #15803d; }
+  .type-other { background: #f9fafb; color: #6b7280; }
+  .badge.chain { background: #ecfdf5; color: var(--green); }
+  .badge.minus { background: #fef2f2; color: var(--red); }
+  .badge.overridden { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+  .badge.nosp { background: #f8fafc; color: #64748b; border-color: #e2e8f0; }
+
+  .na { color: #c3c7ce; }
+  .neg { color: var(--red); }
+  .eff-high { color: var(--green); font-weight: 700; }
+  .eff-mid { color: var(--gold); font-weight: 600; }
+
+  .desc-text {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .link-btn {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font-size: 11px;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .link-btn:hover { color: #1d4ed8; }
+  .badge-detail {
+    padding: 0 6px;
+    border: 1px solid #dbeafe;
+    border-radius: 999px;
+    background: #f8fbff;
+    font-size: 10px;
+    line-height: 1.6;
+    text-decoration: none;
+  }
+  .badge-detail:hover { background: #eff6ff; }
+
+  tr.detail-row td {
+    padding: 12px 16px;
+    background: #fbfcfd;
+    border-bottom: 1px solid var(--line);
+    cursor: default;
+  }
+  .detail-desc {
+    max-width: 86ch;
+    color: #374151;
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+  }
+  .detail-meta {
+    margin-top: 9px;
+    display: flex;
+    gap: 6px 16px;
+    flex-wrap: wrap;
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+  .detail-meta b { color: #4b5563; font-weight: 600; }
+
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 20px 20px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .pager .page-info { min-width: 120px; text-align: center; font-variant-numeric: tabular-nums; }
+
+  .help {
+    max-width: 1280px;
+    margin: 0 auto 28px;
+    padding: 0 20px;
+  }
+  .help details {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .help summary {
+    padding: 11px 14px;
+    cursor: pointer;
+    color: #374151;
+    font-weight: 600;
+    font-size: 12.5px;
+  }
+  .help .help-body {
+    padding: 2px 16px 14px;
+    color: #4b5563;
+    font-size: 12px;
+    line-height: 1.75;
+  }
+  .help ul { margin: 6px 0 0; padding-left: 1.3em; }
+  .help li { margin: 2px 0; }
+  .help code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: #f3f4f6;
+    font-size: 11px;
+  }
+
+  /* ---------- cart (summary) ---------- */
+  .cart {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    color: #fff;
+    background: rgba(17, 24, 39, .96);
+    box-shadow: 0 -6px 20px rgba(16, 24, 40, .22);
+    backdrop-filter: blur(8px);
+  }
+  .cart-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 9px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 18px;
+    flex-wrap: wrap;
+  }
+  .cart-stats {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+  }
+  .stat .label {
+    color: #9ca3af;
+    font-size: 10px;
+    letter-spacing: .05em;
+  }
+  .stat .value {
+    margin-top: 1px;
+    font-size: 19px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .value .unit {
+    margin-left: 2px;
+    font-size: 10.5px;
+    font-weight: 500;
+    color: #9ca3af;
+  }
+  .stat .value.na { color: #6b7280; }
+  .cart-actions { display: flex; align-items: center; gap: 8px; }
+  .cart .btn {
+    border-color: #374151;
+    background: #1f2937;
+    color: #e5e7eb;
+  }
+  .cart .btn:hover { background: #374151; }
+  .cart .btn.primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+  }
+  .cart .btn.primary:hover { background: #1d4ed8; }
+  .cart-note {
+    flex-basis: 100%;
+    margin-top: -3px;
+    color: #9ca3af;
+    font-size: 10.5px;
+    line-height: 1.4;
+  }
+  .cart-note .warn { color: #fdba74; }
+
+  .empty {
+    max-width: 1280px;
+    margin: 30px auto;
+    padding: 50px 20px;
+    text-align: center;
+    color: var(--muted);
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .empty code {
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #f3f4f6;
+  }
+
+  @media (max-width: 1180px) {
+    .col-desc, td.col-desc { display: none; }
+    .col-name { width: 34%; }
+  }
+  @media (max-width: 980px) {
+    .col-upgrade, td.col-upgrade { display: none; }
+    .col-name { width: 38%; }
+  }
+  @media (max-width: 820px) {
+    .col-totalsp, td.col-totalsp { display: none; }
+    .col-name { width: 44%; }
+  }
+  @media (max-width: 760px) {
+    body { padding-bottom: 146px; font-size: 13px; }
+    .topline { padding: 12px 12px 8px; align-items: flex-start; flex-direction: column; gap: 4px; }
+    h1 { font-size: 17px; }
+    .meta { text-align: left; white-space: normal; }
+    .controls { position: static; }
+    .controls-inner { padding: 8px 12px; }
+    thead th { top: 0; padding: 7px 5px; font-size: 10.5px; }
+    .table-wrap { padding: 0 12px 6px; }
+    tbody td { padding: 7px 5px; }
+    .col-check { width: 32px; }
+    td.col-check { padding-left: 6px; padding-right: 2px; }
+    .col-eval { width: 54px; }
+    .col-sp { width: 46px; }
+    .col-eff, td.col-eff { display: none; }
+    .col-toteff { width: 62px; }
+    .col-name { width: auto; }
+    .skill-name { font-size: 13px; }
+    .result-bar { padding: 8px 12px 5px; }
+    .cart-inner { padding: 7px 12px; }
+    .cart-stats { gap: 12px; }
+    .stat .value { font-size: 16px; }
+    .stat .label { font-size: 9px; }
+    .cart-actions { margin-left: auto; }
+  }
+  @media (max-width: 520px) {
+    .col-sp, td.col-sp { display: none; }
+    .cart-stats { gap: 9px 12px; }
+    .stat .value { font-size: 15px; }
+    .stat.hide-sm { display: none; }
+    .btn { padding: 7px 9px; font-size: 12px; }
+    .toggle { padding: 6px 8px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+  <header class="app-head">
+    <div class="topline">
+      <h1>ウマ娘 スキル評価点 査定<span class="sub">スキル名・評価点・スキルポイント(SP)の対応表</span></h1>
+      <div class="meta" id="meta"></div>
+    </div>
+  </header>
+
+  <div class="controls" id="controls">
+    <div class="controls-inner">
+        <div class="search-row">
+          <div class="search-box">
+            <input id="search" type="search" placeholder="スキル名・説明・IDで検索（スペース区切りでAND）" autocomplete="off" spellcheck="false">
+          </div>
+          <select id="category" title="スキルカテゴリで絞り込み">
+            <option value="">すべてのカテゴリ</option>
+          </select>
+          <select id="sort" title="並び順">
+            <option value="total_efficiency:desc">総合効率 高い順</option>
+            <option value="total_efficiency:asc">総合効率 低い順</option>
+            <option value="efficiency:desc">上昇効率 高い順</option>
+            <option value="efficiency:asc">上昇効率 低い順</option>
+            <option value="eval_point:desc">評価点 高い順</option>
+            <option value="eval_point:asc">評価点 低い順</option>
+            <option value="sp:asc">SP 安い順</option>
+            <option value="sp:desc">SP 高い順</option>
+            <option value="total_sp:asc">下位込みSP 安い順</option>
+            <option value="total_sp:desc">下位込みSP 高い順</option>
+            <option value="upgrade_point:desc">上昇評価点 高い順</option>
+            <option value="upgrade_point:asc">上昇評価点 低い順</option>
+            <option value="name:asc">名前順</option>
+            <option value="name:desc">名前順（降順）</option>
+            <option value="type:asc">種別順</option>
+            <option value="type:desc">種別順（降順）</option>
+          </select>
+          <label class="toggle" id="onlyPurchasable-wrap"><input type="checkbox" id="onlyPurchasable"> SP取得可のみ</label>
+          <label class="toggle" id="includeNegative-wrap"><input type="checkbox" id="includeNegative"> マイナス系を含む</label>
+          <label class="toggle" id="onlySelected-wrap"><input type="checkbox" id="onlySelected"> 選択中のみ</label>
+        </div>
+        <div class="chips" id="typeChips"></div>
+      </div>
+  </div>
+
+  <div class="result-bar">
+    <div><strong id="resultCount">0</strong> 件 <span class="hint" id="resultHint"></span></div>
+    <div class="hint">行クリックで選択 / 同じグループは最上位の1つだけ集計</div>
+  </div>
+
+  <main class="table-wrap">
+    <table>
+      <colgroup>
+        <col class="col-check">
+        <col class="col-name">
+        <col class="col-eval">
+        <col class="col-sp">
+        <col class="col-upgrade">
+        <col class="col-eff">
+        <col class="col-totalsp">
+        <col class="col-toteff">
+        <col class="col-desc">
+      </colgroup>
+      <thead>
+        <tr>
+          <th class="col-check"><input type="checkbox" id="pageSelect" title="このページを全選択 / 解除"></th>
+          <th class="sortable" data-sort="name">スキル<span class="arrow" id="arrow-name"></span></th>
+          <th class="sortable num" data-sort="eval_point" title="skill_data.grade_value">評価点<span class="arrow" id="arrow-eval_point"></span></th>
+          <th class="sortable num" data-sort="sp" title="single_mode_skill_need_point.need_skill_point">SP<span class="arrow" id="arrow-sp"></span></th>
+          <th class="sortable num col-upgrade" data-sort="upgrade_point" title="下位スキルからの上昇評価点">上昇評価点<span class="arrow" id="arrow-upgrade_point"></span></th>
+          <th class="sortable num col-eff" data-sort="efficiency" title="上昇評価点 ÷ SP">上昇効率<span class="arrow" id="arrow-efficiency"></span></th>
+          <th class="sortable num col-totalsp" data-sort="total_sp" title="下位スキル取得込みのSP">下位込みSP<span class="arrow" id="arrow-total_sp"></span></th>
+          <th class="sortable num col-toteff" data-sort="total_efficiency" title="評価点 ÷ 下位込みSP">総合効率<span class="arrow" id="arrow-total_efficiency"></span></th>
+          <th class="col-desc">説明</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+
+    <div class="pager">
+      <button class="btn" id="prevPage" type="button">前へ</button>
+      <span class="page-info" id="pageInfo">0 件</span>
+      <button class="btn" id="nextPage" type="button">次へ</button>
+    </div>
+  </main>
+
+  <div class="help">
+    <details>
+      <summary>計算方法・注意事項</summary>
+      <div class="help-body">
+        <ul>
+          <li><b>評価点</b>は <code>skill_data.grade_value</code>、<b>SP</b>は <code>single_mode_skill_need_point.need_skill_point</code> の値です。</li>
+          <li><b>上昇評価点</b>は「このスキルの評価点 − 直下の下位スキルの評価点」、<b>上昇効率</b>は「上昇評価点 ÷ このスキルのSP」です。すでに下位スキルを取得している場合の効率です。</li>
+          <li><b>下位込みSP</b>は、上位スキル取得に必要な下位スキル（同じ <code>group_id</code> の下位 <code>group_rate</code>）のSPを合計した値です。<b>総合効率</b>は「評価点 ÷ 下位込みSP」です。</li>
+          <li>同じグループのスキルを複数選択した場合、<b>最も上位（<code>group_rate</code> が最大）の1つだけ</b>を合計に加算します。下位スキルは「集計外」と表示されます。</li>
+          <li><b>固有</b>・<b>進化</b>はSPでは取得できませんが、評価点は合計に加算されます（合計SPには含まれません）。</li>
+          <li><b>マイナス系</b>（<code>group_rate = -1</code> または評価点が負）は初期状態では非表示です。必要に応じて「マイナス系を含む」をオンにしてください。</li>
+          <li>スキル適性による評価点倍率、固有スキルのレベル補正、ヒントLvによるSP割引は<b>未適用</b>です。ゲーム内の実際の査定値とは異なります。</li>
+          <li>特殊スキル（ストーリー・イベント用）と期限切れスキルは収録していません。データは <code>extract_skills.py</code> で再生成できます。</li>
+        </ul>
+      </div>
+    </details>
+  </div>
+
+  <div class="cart" id="cart">
+    <div class="cart-inner">
+      <div class="cart-stats">
+        <div class="stat">
+          <span class="label">選択</span>
+          <span class="value"><span id="statCount">0</span><span class="unit">件</span></span>
+        </div>
+        <div class="stat">
+          <span class="label">合計評価点</span>
+          <span class="value" id="statEval">0</span>
+        </div>
+        <div class="stat">
+          <span class="label">合計SP</span>
+          <span class="value" id="statSp">0</span>
+        </div>
+        <div class="stat">
+          <span class="label">総合効率</span>
+          <span class="value" id="statEff">—</span>
+        </div>
+        <div class="stat hide-sm">
+          <span class="label">SP対象外の評価点</span>
+          <span class="value" id="statNoSp">0</span>
+        </div>
+      </div>
+      <div class="cart-actions">
+        <button class="btn" id="btnClear" type="button">選択解除</button>
+        <button class="btn primary" id="btnCsv" type="button">CSV出力</button>
+      </div>
+      <div class="cart-note" id="cartNote"></div>
+    </div>
+  </div>
+
+  <script src="data/skills.js"></script>
+  <script>
+  (() => {
+    'use strict';
+
+    const DATA = window.SKILL_DATA || {};
+    const SKILLS = Array.isArray(DATA.skills) ? DATA.skills : [];
+    const META = DATA.meta || {};
+    const STORAGE_KEY = 'uma-skill-eval:selected:v1';
+    const TYPE_ORDER = ['ノーマル', 'レア', '固有', '継承固有', '進化', '特殊', 'その他'];
+    const TYPE_CLASS = {
+      'ノーマル': 'normal',
+      'レア': 'rare',
+      '固有': 'unique',
+      '継承固有': 'inherit',
+      '進化': 'evolution',
+      '特殊': 'special',
+      'その他': 'other',
+    };
+    const TYPE_RANK = new Map(TYPE_ORDER.map((t, i) => [t, i]));
+
+    const $ = (id) => document.getElementById(id);
+    const byId = new Map(SKILLS.map((s) => [s.skill_id, s]));
+
+    const state = {
+      query: '',
+      types: new Set(TYPE_ORDER.filter((t) => SKILLS.some((s) => s.type === t))),
+      category: '',
+      onlyPurchasable: false,
+      includeNegative: false,
+      onlySelected: false,
+      sortKey: 'total_efficiency',
+      sortDir: 'desc',
+      page: 1,
+      pageSize: 100,
+      selected: new Set(),
+      expanded: new Set(),
+    };
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
+    function normalize(value) {
+      return String(value == null ? '' : value).toLowerCase().normalize('NFKC');
+    }
+
+    function formatNumber(n) {
+      return Number(n).toLocaleString('ja-JP');
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '不明';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleString('ja-JP', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+      });
+    }
+
+    // 検索用の正規化済み文字列をあらかじめ作っておく
+    for (const s of SKILLS) {
+      s._hay = normalize(`${s.name} ${s.description} ${s.skill_id} ${s.type} ${s.category_label}`);
+      s._descOneLine = String(s.description || '').replace(/\s*\n+\s*/g, ' ');
+    }
+
+    // 選択状態を復元
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        for (const id of JSON.parse(raw)) {
+          const n = Number(id);
+          if (byId.has(n)) state.selected.add(n);
+        }
+      }
+    } catch (err) { /* localStorage が使えない環境でも動作させる */ }
+
+    function saveSelection() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([...state.selected]));
+      } catch (err) { /* ignore */ }
+    }
+
+    function initMeta() {
+      const total = SKILLS.length;
+      const db = formatDate(META.db_mtime);
+      const generated = formatDate(META.generated_at);
+      $('meta').innerHTML =
+        `収録 <b>${formatNumber(total)}</b> スキル（特殊・期限切れを除く）<br>` +
+        `DB更新 ${escapeHtml(db)} ／ 抽出 ${escapeHtml(generated)}`;
+    }
+
+    function initCategory() {
+      const select = $('category');
+      const cats = new Map();
+      for (const s of SKILLS) {
+        cats.set(String(s.category), s.category_label || String(s.category));
+      }
+      const sorted = [...cats.entries()].sort((a, b) => Number(a[0]) - Number(b[0]));
+      for (const [value, label] of sorted) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = label;
+        select.appendChild(opt);
+      }
+    }
+
+    function typeCounts() {
+      const counts = new Map();
+      for (const s of SKILLS) counts.set(s.type, (counts.get(s.type) || 0) + 1);
+      return counts;
+    }
+
+    function renderTypeChips() {
+      const wrap = $('typeChips');
+      const counts = typeCounts();
+      const types = TYPE_ORDER.filter((t) => counts.has(t));
+      const allActive = types.every((t) => state.types.has(t));
+      const html = [
+        `<button type="button" class="chip chip-all" data-type="__all__">すべて</button>`,
+      ];
+      for (const t of types) {
+        const active = state.types.has(t);
+        html.push(
+          `<button type="button" class="chip${active ? ' active' : ''}" data-type="${escapeHtml(t)}">` +
+          `${escapeHtml(t)}<span class="n">${formatNumber(counts.get(t))}</span></button>`
+        );
+      }
+      wrap.innerHTML = html.join('');
+      const all = wrap.querySelector('[data-type="__all__"]');
+      if (all) {
+        all.classList.toggle('active', allActive);
+        all.setAttribute('aria-pressed', String(allActive));
+      }
+      for (const btn of wrap.querySelectorAll('[data-type]:not([data-type="__all__"])')) {
+        btn.setAttribute('aria-pressed', String(btn.classList.contains('active')));
+      }
+    }
+
+    function filteredSkills() {
+      const terms = normalize(state.query).split(/\s+/).filter(Boolean);
+      const out = [];
+      for (const s of SKILLS) {
+        if (!state.types.has(s.type)) continue;
+        if (state.category && String(s.category) !== state.category) continue;
+        if (state.onlyPurchasable && !(s.sp != null && s.sp > 0)) continue;
+        if (!state.includeNegative && (s.group_rate < 0 || s.eval_point < 0)) continue;
+        if (state.onlySelected && !state.selected.has(s.skill_id)) continue;
+        if (terms.length) {
+          let ok = true;
+          for (const t of terms) {
+            if (!s._hay.includes(t)) { ok = false; break; }
+          }
+          if (!ok) continue;
+        }
+        out.push(s);
+      }
+      return out;
+    }
+
+    function compareSkills(a, b) {
+      const key = state.sortKey;
+      const dir = state.sortDir;
+      let r = 0;
+      if (key === 'name') {
+        r = a.name.localeCompare(b.name, 'ja');
+      } else if (key === 'type') {
+        r = (TYPE_RANK.get(a.type) ?? 99) - (TYPE_RANK.get(b.type) ?? 99);
+        if (r === 0) r = a.name.localeCompare(b.name, 'ja');
+      } else {
+        const av = a[key];
+        const bv = b[key];
+        if (av == null && bv == null) r = 0;
+        else if (av == null) r = 1;
+        else if (bv == null) r = -1;
+        else r = dir === 'asc' ? av - bv : bv - av;
+        if (r === 0) r = b.eval_point - a.eval_point;
+        if (r === 0) r = a.skill_id - b.skill_id;
+      }
+      if (dir === 'desc' && (key === 'name' || key === 'type')) r = -r;
+      return r;
+    }
+
+    function computeSummary() {
+      const selected = [...state.selected].map((id) => byId.get(id)).filter(Boolean);
+      const groups = new Map();
+      for (const s of selected) {
+        const cur = groups.get(s.group_id);
+        if (!cur) {
+          groups.set(s.group_id, s);
+          continue;
+        }
+        if (s.group_rate > cur.group_rate ||
+            (s.group_rate === cur.group_rate && s.eval_point > cur.eval_point)) {
+          groups.set(s.group_id, s);
+        }
+      }
+      const counted = [...groups.values()];
+      const countedSet = new Set(counted.map((s) => s.skill_id));
+      let evalTotal = 0;
+      let spTotal = 0;
+      let evalNoSp = 0;
+      for (const s of counted) {
+        evalTotal += Number(s.eval_point) || 0;
+        if (s.total_sp != null) spTotal += Number(s.total_sp) || 0;
+        else evalNoSp += Number(s.eval_point) || 0;
+      }
+      const overridden = selected.filter((s) => !countedSet.has(s.skill_id));
+      return {
+        selected,
+        counted,
+        overridden,
+        evalTotal,
+        spTotal,
+        evalNoSp,
+        efficiency: spTotal > 0 ? evalTotal / spTotal : null,
+      };
+    }
+
+    function updateSummary() {
+      const sum = computeSummary();
+      $('statCount').textContent = formatNumber(sum.selected.length);
+      $('statEval').textContent = formatNumber(sum.evalTotal);
+      $('statSp').textContent = formatNumber(sum.spTotal);
+      $('statNoSp').textContent = formatNumber(sum.evalNoSp);
+      const eff = $('statEff');
+      if (sum.efficiency == null) {
+        eff.textContent = '—';
+        eff.classList.add('na');
+      } else {
+        eff.textContent = sum.efficiency.toFixed(2);
+        eff.classList.remove('na');
+      }
+      const note = $('cartNote');
+      if (!sum.selected.length) {
+        note.innerHTML = 'スキルを選択すると、合計評価点・合計SP・総合効率を計算します。';
+      } else if (sum.overridden.length) {
+        note.innerHTML =
+          `<span class="warn">同一グループの下位 ${formatNumber(sum.overridden.length)} 件は集計外</span>` +
+          `（集計対象 ${formatNumber(sum.counted.length)} 件）。` +
+          `上位スキルを選択すると、下位スキルのSPを含めて計算されます。`;
+      } else {
+        note.textContent =
+          `選択 ${formatNumber(sum.selected.length)} 件を集計。` +
+          (sum.evalNoSp ? ` SP対象外の評価点 ${formatNumber(sum.evalNoSp)} を含みます。` : '');
+      }
+      $('btnClear').disabled = sum.selected.length === 0;
+      $('btnCsv').disabled = sum.counted.length === 0;
+    }
+
+    function typeBadge(type) {
+      return `<span class="badge type-${TYPE_CLASS[type] || 'other'}">${escapeHtml(type)}</span>`;
+    }
+
+    function effClass(value) {
+      if (value == null) return '';
+      if (value >= 1.5) return 'eff-high';
+      if (value >= 1.0) return 'eff-mid';
+      return '';
+    }
+
+    function rowHtml(s, overriddenIds) {
+      const id = s.skill_id;
+      const checked = state.selected.has(id);
+      const overridden = overriddenIds.has(id);
+      const open = state.expanded.has(id);
+      const badges = [typeBadge(s.type)];
+      if (s.group_rate < 0) {
+        badges.push('<span class="badge minus">マイナス</span>');
+      } else if (s.prereq_eval > 0 || s.prereq_sp > 0) {
+        badges.push('<span class="badge chain">上位</span>');
+      }
+      if (s.total_sp == null) {
+        badges.push('<span class="badge nosp">SP対象外</span>');
+      }
+      if (overridden) {
+        badges.push('<span class="badge overridden">集計外</span>');
+      }
+      badges.push(
+        `<button type="button" class="link-btn badge-detail" data-action="detail" data-id="${id}">` +
+        `${open ? '詳細を閉じる' : '詳細'}</button>`
+      );
+
+      const sp = s.sp == null ? '<span class="na">—</span>' : formatNumber(s.sp);
+      const upgrade = s.upgrade_point == null ? '<span class="na">—</span>' : formatNumber(s.upgrade_point);
+      const effort = s.efficiency == null ? '<span class="na">—</span>' : s.efficiency.toFixed(2);
+      const totalSp = s.total_sp == null
+        ? '<span class="na">—</span>'
+        : formatNumber(s.total_sp);
+      const totalEffort = s.total_efficiency == null ? '<span class="na">—</span>' : s.total_efficiency.toFixed(2);
+      const totalSpTitle = s.total_sp == null
+        ? 'SP対象外'
+        : (s.prereq_sp > 0 ? `下位込み（内訳: 下位 ${formatNumber(s.prereq_sp)} + このスキル ${formatNumber(s.sp || 0)}）` : `${formatNumber(s.total_sp)}`);
+      const desc = s._descOneLine ? escapeHtml(s._descOneLine) : '<span class="na">説明なし</span>';
+      const descShort = s._descOneLine
+        ? (s._descOneLine.length > 56 ? escapeHtml(s._descOneLine.slice(0, 56)) + '…' : escapeHtml(s._descOneLine))
+        : '<span class="na">説明なし</span>';
+
+      const rows = [];
+      rows.push(
+        `<tr class="skill-row${checked ? ' selected' : ''}${overridden ? ' overridden' : ''}" data-id="${id}">` +
+          `<td class="col-check"><input type="checkbox" data-id="${id}"${checked ? ' checked' : ''} aria-label="${escapeHtml(s.name)} を選択"></td>` +
+          `<td class="col-name">` +
+            `<div class="skill-name">${escapeHtml(s.name)}</div>` +
+            `<div class="skill-sub">${badges.join('')}</div>` +
+          `</td>` +
+          `<td class="num col-eval${s.eval_point < 0 ? ' neg' : ''}">${formatNumber(s.eval_point)}</td>` +
+          `<td class="num col-sp">${sp}</td>` +
+          `<td class="num col-upgrade">${upgrade}</td>` +
+          `<td class="num col-eff ${effClass(s.efficiency)}">${effort}</td>` +
+          `<td class="num col-totalsp" title="${escapeHtml(totalSpTitle)}">${totalSp}</td>` +
+          `<td class="num col-toteff ${effClass(s.total_efficiency)}">${totalEffort}</td>` +
+          `<td class="col-desc"><span class="desc-text" title="${desc}">${descShort}</span></td>` +
+        `</tr>`
+      );
+      if (open) {
+        const fullDesc = s.description
+          ? escapeHtml(s.description).replace(/\n/g, '<br>')
+          : '<span class="na">説明なし</span>';
+        rows.push(
+          `<tr class="detail-row"><td colspan="9">` +
+            `<div class="detail-desc">${fullDesc}</div>` +
+            `<div class="detail-meta">` +
+              `<span>ID <b>${s.skill_id}</b></span>` +
+              `<span>グループ <b>${s.group_id}</b>（rate ${s.group_rate}）</span>` +
+              `<span>カテゴリ <b>${escapeHtml(s.category_label)}</b></span>` +
+              `<span>下位評価点 <b>${formatNumber(s.prereq_eval)}</b></span>` +
+              `<span>下位SP <b>${formatNumber(s.prereq_sp)}</b></span>` +
+              `<span>上昇評価点 <b>${formatNumber(s.upgrade_point)}</b></span>` +
+            `</div>` +
+          `</td></tr>`
+        );
+      }
+      return rows.join('');
+    }
+
+    function renderArrows() {
+      for (const key of ['name', 'eval_point', 'sp', 'upgrade_point', 'efficiency', 'total_sp', 'total_efficiency']) {
+        const el = $('arrow-' + key);
+        if (!el) continue;
+        el.textContent = state.sortKey === key ? (state.sortDir === 'asc' ? '▲' : '▼') : '';
+      }
+      for (const th of document.querySelectorAll('thead th[data-sort]')) {
+        th.classList.toggle('sorted', th.dataset.sort === state.sortKey);
+      }
+    }
+
+    function render() {
+      const filtered = filteredSkills().sort(compareSkills);
+      const total = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(total / state.pageSize));
+      if (state.page > totalPages) state.page = totalPages;
+      if (state.page < 1) state.page = 1;
+      const start = (state.page - 1) * state.pageSize;
+      const pageRows = filtered.slice(start, start + state.pageSize);
+
+      const sum = computeSummary();
+      const overriddenIds = new Set(sum.overridden.map((s) => s.skill_id));
+
+      $('tbody').innerHTML = pageRows.map((s) => rowHtml(s, overriddenIds)).join('');
+
+      $('resultCount').textContent = formatNumber(total);
+      const hiddenNegative = state.includeNegative
+        ? 0
+        : SKILLS.filter((s) => (s.group_rate < 0 || s.eval_point < 0) && state.types.has(s.type)).length;
+      $('resultHint').textContent = hiddenNegative
+        ? `（マイナス系 ${formatNumber(hiddenNegative)} 件を非表示）`
+        : '';
+
+      const from = total ? start + 1 : 0;
+      const to = start + pageRows.length;
+      $('pageInfo').textContent = `${formatNumber(from)}–${formatNumber(to)} / ${formatNumber(total)}`;
+      $('prevPage').disabled = state.page <= 1;
+      $('nextPage').disabled = state.page >= totalPages;
+
+      const pageAll = pageRows.length > 0 && pageRows.every((s) => state.selected.has(s.skill_id));
+      const pageSome = pageRows.some((s) => state.selected.has(s.skill_id));
+      const pageSelect = $('pageSelect');
+      pageSelect.checked = pageAll;
+      pageSelect.indeterminate = !pageAll && pageSome;
+      pageSelect.disabled = pageRows.length === 0;
+
+      updateSummary();
+      renderArrows();
+    }
+
+    function toggleSkill(id) {
+      if (state.selected.has(id)) state.selected.delete(id);
+      else state.selected.add(id);
+      saveSelection();
+      render();
+    }
+
+    function togglePage(select) {
+      const filtered = filteredSkills().sort(compareSkills);
+      const start = (state.page - 1) * state.pageSize;
+      const pageRows = filtered.slice(start, start + state.pageSize);
+      for (const s of pageRows) {
+        if (select) state.selected.add(s.skill_id);
+        else state.selected.delete(s.skill_id);
+      }
+      saveSelection();
+      render();
+    }
+
+    function syncSortSelect() {
+      const select = $('sort');
+      const value = `${state.sortKey}:${state.sortDir}`;
+      const has = [...select.options].some((o) => o.value === value);
+      if (has) {
+        select.value = value;
+      } else {
+        // ヘッダークリックで select にない組み合わせになった場合の保険
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = value;
+        select.appendChild(opt);
+        select.value = value;
+      }
+    }
+
+    function setSort(key, dir) {
+      if (state.sortKey === key && !dir) {
+        state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.sortKey = key;
+        state.sortDir = dir || (key === 'name' || key === 'type' ? 'asc' : 'desc');
+      }
+      state.page = 1;
+      syncSortSelect();
+      render();
+    }
+
+    function csvCell(value) {
+      if (value == null) return '';
+      const str = String(value);
+      return /[",\r\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+    }
+
+    function exportCsv() {
+      const sum = computeSummary();
+      if (!sum.counted.length) return;
+      const rows = [...sum.counted].sort((a, b) =>
+        a.group_id - b.group_id || a.group_rate - b.group_rate || a.skill_id - b.skill_id
+      );
+      const header = [
+        'skill_id', 'name', 'type', 'rarity', 'eval_point', 'sp',
+        'upgrade_point', 'efficiency', 'total_sp', 'total_efficiency',
+        'group_id', 'group_rate', 'prereq_sp', 'prereq_eval',
+        'category', 'category_label', 'description',
+      ];
+      const lines = [header.join(',')];
+      for (const s of rows) {
+        lines.push(header.map((k) => csvCell(s[k])).join(','));
+      }
+      const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const d = new Date();
+      const stamp =
+        d.getFullYear() +
+        String(d.getMonth() + 1).padStart(2, '0') +
+        String(d.getDate()).padStart(2, '0') + '_' +
+        String(d.getHours()).padStart(2, '0') +
+        String(d.getMinutes()).padStart(2, '0');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `uma_skill_selection_${stamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function updateStickyOffset() {
+      const controls = $('controls');
+      const h = controls ? controls.getBoundingClientRect().height : 0;
+      document.documentElement.style.setProperty('--controls-h', `${Math.ceil(h)}px`);
+    }
+
+    function bind() {
+      $('search').addEventListener('input', (e) => {
+        state.query = e.target.value;
+        state.page = 1;
+        render();
+      });
+
+      $('category').addEventListener('change', (e) => {
+        state.category = e.target.value;
+        state.page = 1;
+        render();
+      });
+
+      $('sort').addEventListener('change', (e) => {
+        const [key, dir] = e.target.value.split(':');
+        state.sortKey = key;
+        state.sortDir = dir;
+        state.page = 1;
+        render();
+      });
+
+      $('onlyPurchasable').addEventListener('change', (e) => {
+        state.onlyPurchasable = e.target.checked;
+        e.target.closest('.toggle').classList.toggle('on', e.target.checked);
+        state.page = 1;
+        render();
+      });
+
+      $('includeNegative').addEventListener('change', (e) => {
+        state.includeNegative = e.target.checked;
+        e.target.closest('.toggle').classList.toggle('on', e.target.checked);
+        state.page = 1;
+        render();
+      });
+
+      $('onlySelected').addEventListener('change', (e) => {
+        state.onlySelected = e.target.checked;
+        e.target.closest('.toggle').classList.toggle('on', e.target.checked);
+        state.page = 1;
+        render();
+      });
+
+      $('typeChips').addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-type]');
+        if (!chip) return;
+        const type = chip.dataset.type;
+        const all = TYPE_ORDER.filter((t) => SKILLS.some((s) => s.type === t));
+        if (type === '__all__') {
+          const every = all.every((t) => state.types.has(t));
+          state.types = new Set(every ? [] : all);
+        } else if (state.types.has(type)) {
+          state.types.delete(type);
+        } else {
+          state.types.add(type);
+        }
+        state.page = 1;
+        renderTypeChips();
+        render();
+      });
+
+      $('tbody').addEventListener('click', (e) => {
+        const detailBtn = e.target.closest('[data-action="detail"]');
+        if (detailBtn) {
+          e.stopPropagation();
+          const id = Number(detailBtn.dataset.id);
+          if (state.expanded.has(id)) state.expanded.delete(id);
+          else state.expanded.add(id);
+          render();
+          return;
+        }
+        if (e.target.closest('input, button, a, select, label')) return;
+        const tr = e.target.closest('tr.skill-row');
+        if (tr) toggleSkill(Number(tr.dataset.id));
+      });
+
+      $('tbody').addEventListener('change', (e) => {
+        const cb = e.target.closest('input[type="checkbox"][data-id]');
+        if (!cb) return;
+        toggleSkill(Number(cb.dataset.id));
+      });
+
+      $('pageSelect').addEventListener('change', (e) => {
+        togglePage(e.target.checked);
+      });
+
+      $('prevPage').addEventListener('click', () => {
+        if (state.page > 1) { state.page--; render(); }
+      });
+
+      $('nextPage').addEventListener('click', () => {
+        state.page++;
+        render();
+      });
+
+      $('btnClear').addEventListener('click', () => {
+        state.selected.clear();
+        saveSelection();
+        render();
+      });
+
+      $('btnCsv').addEventListener('click', exportCsv);
+
+      for (const th of document.querySelectorAll('thead th[data-sort]')) {
+        th.addEventListener('click', () => {
+          setSort(th.dataset.sort);
+        });
+      }
+
+      window.addEventListener('resize', updateStickyOffset);
+      if ('ResizeObserver' in window) {
+        const ro = new ResizeObserver(updateStickyOffset);
+        ro.observe($('controls'));
+      }
+    }
+
+    function init() {
+      if (!SKILLS.length) {
+        document.body.innerHTML =
+          '<div class="empty">データが読み込まれていません。<br>' +
+          '<code>data/skills.js</code> を確認し、<code>py extract_skills.py</code> を実行してください。</div>';
+        return;
+      }
+      initMeta();
+      initCategory();
+      renderTypeChips();
+      bind();
+      updateStickyOffset();
+      render();
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+円弧のマエストロ {'skill_id': 200351, 'type': 'レア', 'eval_point': 508, 'sp': 170, 'upgrade_point': 291, 'efficiency': 1.712, 'total_sp': 340, 'total_efficiency': 1.494, 'group_id': 20035, 'group_rate': 2, 'prereq_sp': 170, 'prereq_eval': 217}
+先手必勝 {'skill_id': 200531, 'type': 'レア', 'eval_point': 334, 'sp': 120, 'upgrade_point': 117, 'efficiency': 0.975, 'total_sp': 240, 'total_efficiency': 1.392, 'group_id': 20053, 'group_rate': 2, 'prereq_sp': 120, 'prereq_eval': 217}
+右回り◎ {'skill_id': 200011, 'type': 'ノーマル', 'eval_point': 174, 'sp': 110, 'upgrade_point': 45, 'efficiency': 0.409, 'total_sp': 200, 'total_efficiency': 0.87, 'group_id': 20001, 'group_rate': 2, 'prereq_sp': 90, 'prereq_eval': 129}
+右回り○ {'skill_id': 200012, 'type': 'ノーマル', 'eval_point': 129, 'sp': 90, 'upgrade_point': 129, 'efficiency': 1.433, 'total_sp': 90, 'total_efficiency': 1.433, 'group_id': 20001, 'group_rate': 1, 'prereq_sp': 0, 'prereq_eval': 0}
+右回りの鬼 {'skill_id': 200014, 'type': 'レア', 'eval_point': 461, 'sp': 130, 'upgrade_point': 287, 'efficiency': 2.208, 'total_sp': 330, 'total_efficiency': 1.397, 'group_id': 20001, 'group_rate': 3, 'prereq_sp': 200, 'prereq_eval': 174}
+コンセントレーション {'skill_id': 200431, 'type': 'レア', 'eval_point': 394, 'sp': 140, 'upgrade_point': 265, 'efficiency': 1.893, 'total_sp': 280, 'total_efficiency': 1.407, 'group_id': 20043, 'group_rate': 2, 'prereq_sp': 140, 'prereq_eval': 129}
+集中力 {'skill_id': 200432, 'type': 'ノーマル', 'eval_point': 129, 'sp': 140, 'upgrade_point': 129, 'efficiency': 0.921, 'total_sp': 140, 'total_efficiency': 0.921, 'group_id': 20043, 'group_rate': 1, 'prereq_sp': 0, 'prereq_eval': 0}
+地固め {'skill_id': 201601, 'type': 'ノーマル', 'eval_point': 217, 'sp': 100, 'upgrade_point': 217, 'efficiency': 2.17, 'total_sp': 100, 'total_efficiency': 2.17, 'group_id': 20160, 'group_rate': 1, 'prereq_sp': 0, 'prereq_eval': 0}
+中距離直線◎ {'skill_id': 201101, 'type': 'ノーマル', 'eval_point': 262, 'sp': 110, 'upgrade_point': 45, 'efficiency': 0.409, 'total_sp': 210, 'total_efficiency': 1.248, 'group_id': 20110, 'group_rate': 2, 'prereq_sp': 100, 'prereq_eval': 217}
+シューティングスター {'skill_id': 100011, 'type': '固有', 'eval_point': 340, 'sp': None, 'upgrade_point': 340, 'efficiency': None, 'total_sp': None, 'total_efficiency': None, 'group_id': 10001, 'group_rate': 1, 'prereq_sp': 0, 'prereq_eval': 0}
+シューティングスター {'skill_id': 900011, 'type': '継承固有', 'eval_point': 180, 'sp': 200, 'upgrade_point': 180, 'efficiency': 0.9, 'total_sp': 200, 'total_efficiency': 0.9, 'group_id': 90001, 'group_rate': 2, 'prereq_sp': 0, 'prereq_eval': 0}
+脱兎の先へ {'skill_id': 202581, 'type': 'レア', 'eval_point': 633, 'sp': 200, 'upgrade_point': 370, 'efficiency': 1.85, 'total_sp': 400, 'total_efficiency': 1.583, 'group_id': 20258, 'group_rate': 2, 'prereq_sp': 200, 'prereq_eval': 263}
+
+=== top total_efficiency (purchasable, sp>=50) ===
+短距離直線○ ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+短距離コーナー○ ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+マイル直線○ ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+マイルコーナー○ ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+中距離直線○ ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+中距離コーナー○ ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+長距離直線○ ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+長距離コーナー○ ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+地固め ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+尻尾上がり ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+ふり絞り ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+ダート直線○ ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+ダートコーナー○ ノーマル eval 217 sp 100 totSP 100 totEff 2.17
+抜群の踏み込み レア eval 461 sp 120 totSP 240 totEff 1.921
+砂上の舞姫 レア eval 461 sp 120 totSP 240 totEff 1.921

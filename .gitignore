@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# エディタ / OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+
+# DB調査用の一時ファイル（ツール本体には不要）
+explore.py
+inspect*.py
+inspect*.txt
+tables.txt
