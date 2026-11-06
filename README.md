@@ -2,7 +2,7 @@
 
 `master.mdb` から **スキル名・評価点・スキルポイント(SP)** を抽出し、査定用の一覧表示と合計計算を行うツールです。
 
-`index.html` をブラウザで開くだけで使えます（ローカルファイルのまま動作します）。
+`dist/index.html` をブラウザで開くだけで使えます（単一ファイルで動作します）。開発時は `npm run dev` を使ってください。
 
 ## できること
 
@@ -35,7 +35,7 @@
 
 ## 使い方
 
-1. `C:\Users\wister2\apps\uma-skill-eval\index.html` をブラウザで開く
+1. `C:\Users\wister2\apps\uma-skill-eval\dist\index.html` をブラウザで開く（開発時は `npm run dev` で表示）
 2. 必要に応じて「ウマ娘」を選び、初期適性を自動設定する
 3. 必要に応じて進化パネルのドロップダウンで、各金スキルの「通常 / 進化先」を選ぶ
 4. 必要に応じて「シナリオ進化」でシナリオを選び、そのシナリオの進化先を選ぶ
@@ -49,14 +49,17 @@
 12. 必要に応じて「画像認識」でスクリーンショットからスキル名・ヒントLv・ウマ娘を読み取る
 13. 必要に応じて「CSV出力」を押す
 
-> `data/skills.js` を相対パスで読み込むため、`index.html` をダブルクリックして開いても動作します。
+> ビルド後の `dist/index.html` は単一ファイルで動作します。`dist/index.html` をダブルクリックして開いても使用できます。開発時は `npm run dev` を使ってください。
 
 ## ファイル構成
 
 | ファイル | 内容 |
 | --- | --- |
-| `index.html` | 単体で動くビューア／査定ツール |
-| `data/skills.js` | ビューア用データ（`window.SKILL_DATA`） |
+| `index.html` | ViteのエントリーHTML（開発用） |
+| `src/main.js` | ビューア本体のJavaScript |
+| `src/style.css` | ビューアのスタイル |
+| `dist/index.html` | ビルド後の単一ファイル版（配布・直接利用用） |
+| `data/skills.js` | ビューア用データ（ESモジュール `export const SKILL_DATA`） |
 | `out/skills.csv` | 全スキルの対応表（2,223件、Excel向け） |
 | `out/skills_purchasable.csv` | SPで取得できるスキルのみ（1,195件） |
 | `out/skills_rating.csv` | 特殊・期限切れを除いた査定用一覧（2,189件） |
@@ -64,6 +67,32 @@
 | `extract_skills.py` | `master.mdb` からの抽出スクリプト |
 | `verify.py` | 主要スキルの計算検証スクリプト |
 | `verify.txt` | 検証結果の出力例 |
+| `package.json` | Viteの依存関係とスクリプト |
+| `vite.config.js` | Vite + `vite-plugin-singlefile` の設定 |
+| `tools/` | DB調査用の一時スクリプト・出力（Git管理外） |
+
+## 開発（Vite）
+
+初回のみ依存関係をインストールします。
+
+```powershell
+cd C:\Users\wister2\apps\uma-skill-eval
+npm install
+```
+
+開発サーバー:
+
+```powershell
+npm run dev
+```
+
+単一ファイルへのビルド:
+
+```powershell
+npm run build
+```
+
+ビルド結果は `dist/index.html` に出力されます。CSS・JavaScript・`data/skills.js` がすべて1ファイルにインライン化されます。
 
 ## データの再生成
 
@@ -84,6 +113,13 @@ py extract_skills.py --db "C:\path\to\master.mdb"
 
 ```powershell
 py extract_skills.py --db master.mdb --out out --js data/skills.js
+```
+
+データ再生成後は、単一ファイル版を更新するため `npm run build` を実行してください。
+
+```powershell
+py extract_skills.py
+npm run build
 ```
 
 - Pythonは `py` コマンド（Python 3.13）を想定しています。
@@ -398,10 +434,10 @@ CSV出力では、ヒント割引前と割引後の両方を出力します。
   - `cardGoldSkillEvolutions`: `skill_upgrade_description` のカード別・金スキル → 進化スキル対応（`rank` = `need_rank`）
   - `scenarios`: `single_mode_scenario` と `text_data`（category 119）のシナリオ一覧
   - `scenarioEvolutions`: `skill_upgrade_speciality` のシナリオ別進化スキル
-- `py extract_skills.py` を実行すると、`index.html` の `data/skills.js?v=...` も自動更新されます（ブラウザキャッシュ回避）。
-- OCRは `index.html` 内で Tesseract.js v5（`jpn+eng`）をCDNから遅延読み込みします。画像はCanvasでグレースケール・コントラスト補正・Otsu二値化してから認識します。
-- OCRの辞書は `data/skills.js` のスキル名と `cards` をそのまま使用します。スキルを追加した場合はデータ再生成だけで辞書も更新されます。
-- `data/skills.js` は約1.5MBあります。`index.html` と同じフォルダ構成のまま使用してください。
+- `py extract_skills.py` で `data/skills.js` を再生成した後は、`npm run build` で `dist/index.html` を更新してください。
+- OCRは `src/main.js` 内で Tesseract.js v5（`jpn+eng`）をCDNから遅延読み込みします。画像はCanvasでグレースケール・コントラスト補正・Otsu二値化してから認識します。
+- OCRの辞書は `data/skills.js` のスキル名と `cards` をそのまま使用します。スキルを追加した場合はデータ再生成と再ビルドで辞書も更新されます。
+- `data/skills.js` は約1.5MBあります。Viteビルド時に `dist/index.html` へインライン化されます。
 - 検証:
 
 ```powershell

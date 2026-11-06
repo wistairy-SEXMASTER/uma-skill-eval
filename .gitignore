@@ -5,17 +5,20 @@ __pycache__/
 .venv/
 venv/
 
+# Node / Vite
+node_modules/
+
 # エディタ / OS
 .vscode/
 .idea/
 Thumbs.db
 Desktop.ini
 
-# DB調査用の一時ファイル（ツール本体には不要）
-explore.py
-inspect*.py
-inspect*.txt
-tables.txt
+# DB調査用の一時ファイル（tools/ 配下）
+tools/explore.py
+tools/inspect*.py
+tools/inspect*.txt
+tools/tables.txt
 
 # ゲーム内フォント（ライセンス上、再配布しない）
 assets/umamusume-font.ttf

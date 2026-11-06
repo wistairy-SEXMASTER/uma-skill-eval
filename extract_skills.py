@@ -548,9 +548,9 @@ def write_js(
     scenario_evolutions: dict[int, list[dict]],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    # index.html から <script src="data/skills.js"> で読み込む
+    # src/main.js から ES モジュールとして読み込む
     with path.open("w", encoding="utf-8") as f:
-        f.write("window.SKILL_DATA = ")
+        f.write("export const SKILL_DATA = ")
         json.dump(
             {
                 "meta": meta,
@@ -566,23 +566,6 @@ def write_js(
             separators=(",", ":"),
         )
         f.write(";\n")
-
-
-def update_index_cache_version(index_path: Path, version: str) -> None:
-    """index.html の data/skills.js の ?v= を更新してキャッシュを回避する。"""
-    if not index_path.is_file():
-        return
-    with index_path.open("r", encoding="utf-8", newline="") as f:
-        text = f.read()
-    updated = re.sub(
-        r'(src=["\']data/skills\.js)(?:\?v=[^"\']*)?(["\'])',
-        rf"\1?v={version}\2",
-        text,
-        count=1,
-    )
-    if updated != text:
-        with index_path.open("w", encoding="utf-8", newline="") as f:
-            f.write(updated)
 
 
 def extract_game_font(db_path: Path, out_path: Path) -> bool:
@@ -679,7 +662,6 @@ def main() -> int:
         scenarios,
         scenario_evolutions,
     )
-    update_index_cache_version(Path(args.js).resolve().parent.parent / "index.html", str(now))
     font_path = Path(args.js).resolve().parent.parent / "assets" / "umamusume-font.ttf"
     extract_game_font(db_path, font_path)
 
