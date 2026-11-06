@@ -392,6 +392,43 @@ def load_card_gold_skill_evolutions(con: sqlite3.Connection) -> dict[int, list[d
     return dict(out)
 
 
+def load_scenarios(con: sqlite3.Connection) -> list[dict]:
+    """育成シナリオ一覧。名前は text_data category=119。"""
+    sql = """
+        SELECT sc.id, sc.sort_id, tn.text AS name
+        FROM single_mode_scenario AS sc
+        LEFT JOIN text_data AS tn ON tn.category = 119 AND tn."index" = sc.id
+        ORDER BY sc.sort_id, sc.id
+    """
+    out = []
+    for r in con.execute(sql):
+        out.append(
+            {
+                "id": int(r["id"]),
+                "sort_id": int(r["sort_id"] or 0),
+                "name": clean_text(r["name"]) or f"シナリオ {r['id']}",
+            }
+        )
+    return out
+
+
+def load_scenario_evolutions(con: sqlite3.Connection) -> dict[int, list[dict]]:
+    """シナリオごとの進化スキル（skill_upgrade_speciality）。"""
+    out: dict[int, list[dict]] = defaultdict(list)
+    for r in con.execute("""
+        SELECT scenario_id, base_skill_id, skill_id
+        FROM skill_upgrade_speciality
+        ORDER BY scenario_id, id
+    """):
+        out[int(r["scenario_id"])].append(
+            {
+                "base_skill_id": int(r["base_skill_id"]),
+                "skill_id": int(r["skill_id"]),
+            }
+        )
+    return dict(out)
+
+
 def build_groups(rows: list[dict]) -> dict[int, list[dict]]:
     groups: dict[int, list[dict]] = defaultdict(list)
     for r in rows:
@@ -507,6 +544,8 @@ def write_js(
     cards: list[dict],
     card_initial_skills: dict[int, list[int]],
     card_gold_skill_evolutions: dict[int, list[dict]],
+    scenarios: list[dict],
+    scenario_evolutions: dict[int, list[dict]],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     # index.html から <script src="data/skills.js"> で読み込む
@@ -519,6 +558,8 @@ def write_js(
                 "cards": cards,
                 "cardInitialSkills": card_initial_skills,
                 "cardGoldSkillEvolutions": card_gold_skill_evolutions,
+                "scenarios": scenarios,
+                "scenarioEvolutions": scenario_evolutions,
             },
             f,
             ensure_ascii=False,
@@ -601,6 +642,8 @@ def main() -> int:
     cards = load_cards(con)
     card_initial_skills = load_card_initial_skills(con)
     card_gold_skill_evolutions = load_card_gold_skill_evolutions(con)
+    scenarios = load_scenarios(con)
+    scenario_evolutions = load_scenario_evolutions(con)
     con.close()
 
     if not raw:
@@ -633,6 +676,8 @@ def main() -> int:
         cards,
         card_initial_skills,
         card_gold_skill_evolutions,
+        scenarios,
+        scenario_evolutions,
     )
     update_index_cache_version(Path(args.js).resolve().parent.parent / "index.html", str(now))
     font_path = Path(args.js).resolve().parent.parent / "assets" / "umamusume-font.ttf"
