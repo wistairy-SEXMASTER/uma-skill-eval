@@ -1128,8 +1128,8 @@
           <li><b>ウマ娘</b>を選ぶと、そのカードの距離適性・脚質適性を「査定設定」に自動反映します。芝・ダート適性は表示のみで、評価点倍率には影響しません。「初期適性に戻す」で再適用できます。</li>
           <li><b>適性フィルタ</b>は距離・馬場・脚質のチップで絞り込みます。スキルの適性条件のうち<b>いずれか1つでも一致</b>すれば表示します（例: ＜短距離・芝＞ は短距離または芝のどちらかで表示）。「汎用を含む」をオフにすると、適性条件のないスキルを除外します。</li>
           <li><b>効果カテゴリ</b>は「速度」「加速」「回復」「緑」「デバフ」「位置取り」「視野」「ゲート」などのチップで絞り込みます。主効果（<code>ability_type_1_1</code>）で分類し、複数効果があるスキルは最初の効果を使います。</li>
-          <li><b>シナリオ</b>を選ぶと、そのシナリオで選択可能な<b>進化スキル</b>だけを一覧に表示します。カード固有の進化スキルは、ウマ娘を選択している場合にあわせて表示します。</li>
-          <li><b>ウマ娘</b>を選ぶと、そのカードが最初から持っている<b>金スキル</b>に対応する進化スキルを表示します。シナリオ未選択の場合は全シナリオ分を表示します。カード固有スキルの進化もあわせて表示します。</li>
+          <li><b>シナリオ</b>を選ぶと、そのシナリオで選択可能な<b>進化スキル</b>だけを一覧に表示します。</li>
+          <li><b>ウマ娘</b>を選ぶと、そのカードが最初から持っている<b>金スキル</b>に対応する進化スキルを表示します。シナリオ未選択の場合は全シナリオ分を表示します。固有スキルは進化の対象外です。</li>
           <li><b>獲得SPから最大評価を計算</b>は、入力したSP予算内で合計評価点が最大になるスキルの組み合わせを求めます。同じグループは最上位1つを選び、下位スキルのSPもコストに含めます。ヒントLv・切れ者・適性倍率を反映します。固有・継承固有などSP対象外のスキルは計算対象外です。<b>選択中のスキルがある場合は、その選択だけを対象に計算します。</b></li>
           <li>「結果を選択に反映」を押すと、計算結果のSP取得スキルを選択状態にします（SP対象外の選択は保持）。</li>
           <li><b>画像認識</b>は「画像を追加」またはドラッグ＆ドロップ、クリップボード貼り付け、画面キャプチャに対応しています。画像はブラウザ内で処理され、外部に送信されません（OCRエンジンの取得のみネット接続を使用）。</li>
@@ -1180,7 +1180,7 @@
     </div>
   </div>
 
-  <script src="data/skills.js?v=1793985786"></script>
+  <script src="data/skills.js?v=1793986780"></script>
   <script>
   (() => {
     'use strict';
@@ -1190,8 +1190,6 @@
     const META = DATA.meta || {};
     const SCENARIOS = Array.isArray(DATA.scenarios) ? DATA.scenarios : [];
     const CARD_INITIAL_SKILLS = DATA.cardInitialSkills || {};
-    const CARD_UNIQUE_EVOLUTIONS = DATA.cardUniqueEvolutions || {};
-    const CARD_SUCCESSION_EVOLUTIONS = DATA.cardSuccessionEvolutions || {};
     const SCENARIO_EVOLUTIONS = DATA.scenarioEvolutions || {};
     const EFFECT_ORDER = ['速度', '加速', '回復', '緑', 'デバフ', '位置取り', '視野', 'ゲート', '特殊', 'その他'];
     const EFFECT_CLASS = {
@@ -1740,13 +1738,9 @@
       return SCENARIO_EVOLUTIONS[String(scenarioId)] || [];
     }
 
-    function evolutionSkillIdsForScenario(scenarioId, cardId) {
+    function evolutionSkillIdsForScenario(scenarioId) {
       const ids = new Set();
       for (const e of scenarioEvolutionEntries(scenarioId)) ids.add(e.skill_id);
-      if (cardId != null) {
-        for (const e of CARD_UNIQUE_EVOLUTIONS[String(cardId)] || []) ids.add(e.skill_id);
-        for (const e of CARD_SUCCESSION_EVOLUTIONS[String(cardId)] || []) ids.add(e.skill_id);
-      }
       return ids;
     }
 
@@ -1781,7 +1775,7 @@
         note.textContent = 'シナリオ未選択：すべての進化スキルを表示します。';
         return;
       }
-      const ids = evolutionSkillIdsForScenario(state.scenarioId, state.cardId);
+      const ids = evolutionSkillIdsForScenario(state.scenarioId);
       note.textContent = `このシナリオで選択可能な進化スキル ${formatNumber(ids.size)} 件。`;
     }
 
@@ -1825,8 +1819,6 @@
         goldEvos.push(e);
       }
 
-      const uniqueEvos = CARD_UNIQUE_EVOLUTIONS[String(cardId)] || [];
-      const succEvos = CARD_SUCCESSION_EVOLUTIONS[String(cardId)] || [];
       const sections = [];
 
       const goldTitle = state.scenarioId != null
@@ -1856,38 +1848,6 @@
           `<div class="evo-section">` +
             `<div class="evo-section-title">${goldTitle}</div>` +
             `<div class="evo-empty">${state.scenarioId != null ? 'このシナリオで選択できる進化スキルはありません。' : '対応する進化スキルはありません。'}</div>` +
-          `</div>`
-        );
-      }
-
-      if (uniqueEvos.length || succEvos.length) {
-        const items = [];
-        for (const e of uniqueEvos) {
-          items.push(
-            `<div class="evo-item">` +
-              `<span class="evo-base">${escapeHtml(evolutionSkillName(e.base_skill_id))}</span>` +
-              `<span class="evo-arrow">→</span>` +
-              `<span class="evo-skill">${escapeHtml(evolutionSkillName(e.skill_id))}</span>` +
-              `<span class="evo-meta">ランク${e.rank}</span>` +
-              `${evoButtonHtml(e.skill_id)}` +
-            `</div>`
-          );
-        }
-        for (const e of succEvos) {
-          items.push(
-            `<div class="evo-item">` +
-              `<span class="evo-base">${escapeHtml(evolutionSkillName(e.base_skill_id))}</span>` +
-              `<span class="evo-arrow">→</span>` +
-              `<span class="evo-skill">${escapeHtml(evolutionSkillName(e.skill_id))}</span>` +
-              `<span class="evo-meta">継承</span>` +
-              `${evoButtonHtml(e.skill_id)}` +
-            `</div>`
-          );
-        }
-        sections.push(
-          `<div class="evo-section">` +
-            `<div class="evo-section-title">固有スキルの進化</div>` +
-            `<div class="evo-list">${items.join('')}</div>` +
           `</div>`
         );
       }
@@ -2061,7 +2021,7 @@
       const terms = normalize(state.query).split(/\s+/).filter(Boolean);
       const out = [];
       const allowedEvolutions = state.scenarioId != null
-        ? evolutionSkillIdsForScenario(state.scenarioId, state.cardId)
+        ? evolutionSkillIdsForScenario(state.scenarioId)
         : null;
       for (const s of SKILLS) {
         if (!state.types.has(s.type)) continue;
@@ -4119,7 +4079,7 @@
         ? 0
         : SKILLS.filter((s) => (s.group_rate < 0 || s.eval_point < 0) && state.types.has(s.type)).length;
       const evoAllowed = state.scenarioId != null
-        ? evolutionSkillIdsForScenario(state.scenarioId, state.cardId)
+        ? evolutionSkillIdsForScenario(state.scenarioId)
         : null;
       const hiddenEvolution = evoAllowed
         ? SKILLS.filter((s) => s.type === '進化' && state.types.has(s.type) && !evoAllowed.has(s.skill_id)).length

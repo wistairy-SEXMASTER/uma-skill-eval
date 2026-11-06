@@ -210,11 +210,10 @@ CSV出力では、ヒント割引前と割引後の両方を出力します。
 - 「シナリオ」で育成シナリオを選ぶと、そのシナリオで選択可能な**進化スキルだけ**を一覧に表示します。シナリオ未選択の場合は、すべての進化スキルを表示します。
 - シナリオ一覧は `single_mode_scenario`、名前は `text_data`（category 119）から取得します。
 - シナリオ別の進化対応は `skill_upgrade_speciality`（`scenario_id` / `base_skill_id` / `skill_id`）を使用します。
-- ウマ娘を選択している場合、そのカード固有の進化スキル（`skill_upgrade_description` / `skill_upgrade_succession_skill`）もシナリオに関係なく表示します。
-- 「ウマ娘」を選ぶと、そのカードが最初から持つ**金スキル**（`available_skill_set` の `rarity = 2`）に対応する進化スキルを表示します。
+- 進化の対象は、**育成ウマ娘が最初から持つ金スキル**（`available_skill_set` の `rarity = 2`）です。固有スキルは進化の対象外です。
+- 「ウマ娘」を選ぶと、そのカードの金スキルに対応する進化スキルを表示します。
   - シナリオ選択中は、そのシナリオの進化スキルのみを表示します。
   - シナリオ未選択の場合は、全シナリオ分の進化スキルを表示します。
-  - カード固有スキルの進化（ランク3 / 5 / 7、継承進化）もあわせて表示します。
 - 進化スキルの「選択」ボタンで、そのスキルを選択状態にできます。
 
 ### ヒントLvの一括リセット
@@ -386,9 +385,7 @@ CSV出力では、ヒント割引前と割引後の両方を出力します。
 - `data/skills.js` には進化スキル用に次のデータも収録しています。
   - `scenarios`: `single_mode_scenario` と `text_data`（category 119）のシナリオ一覧
   - `cardInitialSkills`: `card_data.available_skill_set_id` → `available_skill_set` の初期スキル
-  - `cardUniqueEvolutions`: `skill_upgrade_description` のカード固有スキル進化
-  - `cardSuccessionEvolutions`: `skill_upgrade_succession_skill` の継承スキル進化
-  - `scenarioEvolutions`: `skill_upgrade_speciality` のシナリオ別進化スキル
+  - `scenarioEvolutions`: `skill_upgrade_speciality` のシナリオ別進化スキル（金スキル → 進化スキル）
 - `py extract_skills.py` を実行すると、`index.html` の `data/skills.js?v=...` も自動更新されます（ブラウザキャッシュ回避）。
 - OCRは `index.html` 内で Tesseract.js v5（`jpn+eng`）をCDNから遅延読み込みします。画像はCanvasでグレースケール・コントラスト補正・Otsu二値化してから認識します。
 - OCRの辞書は `data/skills.js` のスキル名と `cards` をそのまま使用します。スキルを追加した場合はデータ再生成だけで辞書も更新されます。

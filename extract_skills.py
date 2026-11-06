@@ -381,56 +381,6 @@ def load_card_initial_skills(con: sqlite3.Connection) -> dict[int, list[int]]:
     return dict(out)
 
 
-def load_card_unique_evolutions(con: sqlite3.Connection) -> dict[int, list[dict]]:
-    """カード固有スキルの進化（skill_upgrade_description）。
-
-    基礎スキルは card_rarity_data.skill_set → skill_set.skill_id1。
-    """
-    base_by_card: dict[int, int] = {}
-    for r in con.execute("""
-        SELECT r.card_id, ss.skill_id1
-        FROM card_rarity_data AS r
-        JOIN skill_set AS ss ON ss.id = r.skill_set
-        WHERE ss.skill_id1 > 0
-        ORDER BY r.card_id, r.rarity
-    """):
-        base_by_card.setdefault(int(r["card_id"]), int(r["skill_id1"]))
-
-    out: dict[int, list[dict]] = defaultdict(list)
-    for r in con.execute("""
-        SELECT card_id, rank, skill_id
-        FROM skill_upgrade_description
-        ORDER BY card_id, rank, skill_id
-    """):
-        card_id = int(r["card_id"])
-        base_skill_id = base_by_card.get(card_id, 0)
-        out[card_id].append(
-            {
-                "base_skill_id": base_skill_id,
-                "skill_id": int(r["skill_id"]),
-                "rank": int(r["rank"] or 0),
-            }
-        )
-    return dict(out)
-
-
-def load_card_succession_evolutions(con: sqlite3.Connection) -> dict[int, list[dict]]:
-    """カード固有の継承スキル進化（skill_upgrade_succession_skill）。"""
-    out: dict[int, list[dict]] = defaultdict(list)
-    for r in con.execute("""
-        SELECT card_id, base_skill_id, skill_id
-        FROM skill_upgrade_succession_skill
-        ORDER BY card_id, id
-    """):
-        out[int(r["card_id"])].append(
-            {
-                "base_skill_id": int(r["base_skill_id"]),
-                "skill_id": int(r["skill_id"]),
-            }
-        )
-    return dict(out)
-
-
 def load_scenario_evolutions(con: sqlite3.Connection) -> dict[int, list[dict]]:
     """シナリオごとの進化スキル（skill_upgrade_speciality）。"""
     out: dict[int, list[dict]] = defaultdict(list)
@@ -563,8 +513,6 @@ def write_js(
     cards: list[dict],
     scenarios: list[dict],
     card_initial_skills: dict[int, list[int]],
-    card_unique_evolutions: dict[int, list[dict]],
-    card_succession_evolutions: dict[int, list[dict]],
     scenario_evolutions: dict[int, list[dict]],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -578,8 +526,6 @@ def write_js(
                 "cards": cards,
                 "scenarios": scenarios,
                 "cardInitialSkills": card_initial_skills,
-                "cardUniqueEvolutions": card_unique_evolutions,
-                "cardSuccessionEvolutions": card_succession_evolutions,
                 "scenarioEvolutions": scenario_evolutions,
             },
             f,
@@ -663,8 +609,6 @@ def main() -> int:
     cards = load_cards(con)
     scenarios = load_scenarios(con)
     card_initial_skills = load_card_initial_skills(con)
-    card_unique_evolutions = load_card_unique_evolutions(con)
-    card_succession_evolutions = load_card_succession_evolutions(con)
     scenario_evolutions = load_scenario_evolutions(con)
     con.close()
 
@@ -699,8 +643,6 @@ def main() -> int:
         cards,
         scenarios,
         card_initial_skills,
-        card_unique_evolutions,
-        card_succession_evolutions,
         scenario_evolutions,
     )
     update_index_cache_version(Path(args.js).resolve().parent.parent / "index.html", str(now))
