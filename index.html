@@ -56,20 +56,21 @@
           <button class="btn tiny" id="btnCardAptReset" type="button" disabled>初期適性に戻す</button>
           <span class="card-info" id="cardInfo"></span>
         </div>
-        <div class="evolution-layout">
-          <div class="card-evolution" id="cardEvolution"></div>
-          <div class="scenario-evolution" id="scenarioEvolution">
-            <details open>
-              <summary>シナリオ進化（シナリオごとに選択可能な進化スキル）</summary>
+        <details class="evolution-section" id="evolutionSection" open>
+          <summary>進化スキル（初期金スキル / シナリオ）</summary>
+          <div class="evolution-layout">
+            <div class="card-evolution" id="cardEvolution"></div>
+            <div class="scenario-evolution" id="scenarioEvolution">
+              <div class="scenario-evolution-title">シナリオ進化（シナリオごとに選択可能な進化スキル）</div>
               <div class="scenario-evolution-body">
                 <label class="opt-field">シナリオ
                   <select id="scenarioSelect" class="card-select"></select>
                 </label>
                 <div class="scenario-evolution-list" id="scenarioEvolutionList"></div>
               </div>
-            </details>
+            </div>
           </div>
-        </div>
+        </details>
         <div class="settings-row sub-row" id="settings">
           <span class="settings-title">査定設定</span>
           <label class="toggle" id="fastLearner-wrap" title="切れ者：ヒントLvのSP割引に −10% を加算">
