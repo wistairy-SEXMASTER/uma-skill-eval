@@ -987,6 +987,14 @@
           <button class="btn" id="ocrCaptureStop" type="button" disabled>停止</button>
           <label class="toggle" id="ocrFastMode-wrap"><input type="checkbox" id="ocrFastMode" checked> 高速モード</label>
           <label class="toggle" id="ocrAutoCrop-wrap"><input type="checkbox" id="ocrAutoCrop" checked> 一覧を自動クロップ</label>
+          <label class="opt-field">感度
+            <select id="ocrSensitivity" class="apt-select" title="変化時取り込みの感度">
+              <option value="high">高</option>
+              <option value="medium" selected>中</option>
+              <option value="low">低</option>
+            </select>
+          </label>
+          <span class="settings-note" id="ocrLiveStatus"></span>
           <span class="settings-note" id="ocrCaptureHint"></span>
           <button class="btn tiny" id="ocrCopyUrl" type="button">URLをコピー</button>
           <button class="btn primary" id="ocrRun" type="button" disabled>認識開始</button>
@@ -1067,6 +1075,7 @@
           <li><b>画像認識</b>は「画像を追加」またはドラッグ＆ドロップ、クリップボード貼り付け、画面キャプチャに対応しています。画像はブラウザ内で処理され、外部に送信されません（OCRエンジンの取得のみネット接続を使用）。</li>
           <li>画面キャプチャは<b>Chrome/Edge</b>で開いた場合に利用できます。OpenCode内蔵ブラウザでは権限が拒否されるため、「画像を追加」または「クリップボードから貼り付け」を使ってください。</li>
           <li>「<b>変化時取り込み</b>」はスクロールのフレーム変化を検出し、スクロールが止まった画面を自動保存します（最大120枚）。100件規模のヒントも画面を分けて取り込めます。</li>
+          <li>変化時取り込みは<b>画面全体</b>と<b>スキル一覧領域</b>の両方を比較します。感度（高/中/低）で調整でき、取り込み中は「画面 diff / 一覧 diff / 取り込み枚数」を表示します。ゲーム画面は共有画面の左側に置いてください。</li>
           <li><b>高速モード</b>（初期オン）はOCRを1パス・1400px・2並列で処理します。精度を優先する場合はオフにしてください。</li>
           <li>ゲーム内フォント（UMAMUSUME-RodinWanpaku）を抽出して候補名の画像照合に使用します。<b>○ / ◎ / ×</b> の区別やOCRの文字誤りを補正します。フォントが無い場合は通常のOCRのみ動作します。</li>
           <li><b>スキル取得画面</b>モードでは、スキル名とヒントLvを認識します。SPコストはOCRしません。スキル一覧を自動クロップし、オレンジのヒントバッジからLvを読み取ります。</li>
@@ -1234,6 +1243,7 @@
       optUseFilter: true,
       ocrFastMode: true,
       ocrAutoCrop: true,
+      ocrSensitivity: 'medium',
     };
     let lastOptimization = null;
 
@@ -1241,8 +1251,11 @@
     const OCR_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
     const OCR_FONT_URL = 'assets/umamusume-font.ttf';
     const OCR_MAX_IMAGES = 120;
-    const OCR_CHANGE_THRESHOLD = 10;
-    const OCR_STABLE_THRESHOLD = 4;
+    const OCR_SENSITIVITY = {
+      high: { full: 3, region: 0.8, stableFull: 1, stableRegion: 0.4 },
+      medium: { full: 5, region: 1.5, stableFull: 2, stableRegion: 0.8 },
+      low: { full: 8, region: 3, stableFull: 3, stableRegion: 1.5 },
+    };
     let ocrImages = [];
     let ocrMode = 'skills';
     let ocrWorkers = [];
@@ -1257,10 +1270,15 @@
       stream: null,
       video: null,
       sampleTimer: null,
-      lastSig: null,
+      lastFullSig: null,
+      lastRegionSig: null,
+      lastSampleAt: 0,
       changed: false,
       stableCount: 0,
       lastCaptureAt: 0,
+      autoActive: false,
+      processorReader: null,
+      frameLoopStarted: false,
     };
 
     function escapeHtml(value) {
@@ -1374,6 +1392,9 @@
         if (typeof saved.optUseFilter === 'boolean') state.optUseFilter = saved.optUseFilter;
         if (typeof saved.ocrFastMode === 'boolean') state.ocrFastMode = saved.ocrFastMode;
         if (typeof saved.ocrAutoCrop === 'boolean') state.ocrAutoCrop = saved.ocrAutoCrop;
+        if (saved.ocrSensitivity === 'high' || saved.ocrSensitivity === 'medium' || saved.ocrSensitivity === 'low') {
+          state.ocrSensitivity = saved.ocrSensitivity;
+        }
       } catch (err) { /* ignore */ }
     }
 
@@ -1394,6 +1415,7 @@
           optUseFilter: state.optUseFilter,
           ocrFastMode: state.ocrFastMode,
           ocrAutoCrop: state.ocrAutoCrop,
+          ocrSensitivity: state.ocrSensitivity,
         }));
       } catch (err) { /* ignore */ }
     }
@@ -2573,18 +2595,40 @@
 
     // ---------- OCR image preprocessing / engine ----------
 
-    function ocrFrameSignature(source, size = 24) {
+    function ocrSourceSize(source) {
+      if (!source) return { w: 0, h: 0 };
+      return {
+        w: source.videoWidth || source.displayWidth || source.codedWidth || source.width || 0,
+        h: source.videoHeight || source.displayHeight || source.codedHeight || source.height || 0,
+      };
+    }
+
+    function ocrFrameSignature(source, size = 24, region = null) {
       const canvas = document.createElement('canvas');
       canvas.width = size;
       canvas.height = size;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(source, 0, 0, size, size);
+      if (region) {
+        ctx.drawImage(source, region.x, region.y, region.w, region.h, 0, 0, size, size);
+      } else {
+        ctx.drawImage(source, 0, 0, size, size);
+      }
       const d = ctx.getImageData(0, 0, size, size).data;
       const out = new Uint8Array(size * size);
       for (let i = 0, j = 0; i < d.length; i += 4, j++) {
         out[j] = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
       }
       return out;
+    }
+
+    function ocrListRegion(source) {
+      const { w, h } = ocrSourceSize(source);
+      return {
+        x: Math.round(w * 0.10),
+        y: Math.round(h * 0.25),
+        w: Math.round(w * 0.50),
+        h: Math.round(h * 0.65),
+      };
     }
 
     function ocrSignatureDiff(a, b) {
@@ -3287,6 +3331,11 @@
         await video.play();
         ocrCapture.stream = stream;
         ocrCapture.video = video;
+        ocrCapture.frameLoopStarted = false;
+        ocrCapture.processorReader = null;
+        ocrCapture.autoActive = false;
+        const usedProcessor = await startFrameProcessor(stream);
+        if (!usedProcessor) startVideoFrameLoop();
         stream.getVideoTracks()[0].addEventListener('ended', stopOcrCapture);
         $('ocrCaptureFrame').disabled = false;
         $('ocrCaptureAuto').disabled = false;
@@ -3326,13 +3375,14 @@
       }
     }
 
-    function captureOcrFrame() {
-      const video = ocrCapture.video;
-      if (!video || !video.videoWidth) return;
+    function captureOcrFrame(source = ocrCapture.video) {
+      if (!source) return;
+      const { w, h } = ocrSourceSize(source);
+      if (!w || !h) return;
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(source, 0, 0, w, h);
       ocrCapture.lastCaptureAt = Date.now();
       const added = addOcrCanvas(canvas, `キャプチャ ${ocrImages.length + 1}`);
       if (added) {
@@ -3340,49 +3390,118 @@
       }
     }
 
-    function sampleCaptureFrame() {
-      const video = ocrCapture.video;
-      if (!video || !video.videoWidth) return;
-      const sig = ocrFrameSignature(video, 24);
-      const diff = ocrSignatureDiff(sig, ocrCapture.lastSig);
-      ocrCapture.lastSig = sig;
+    function sampleCaptureSource(source) {
+      if (!source) return;
+      const { w, h } = ocrSourceSize(source);
+      if (!w || !h) return;
+      const fullSig = ocrFrameSignature(source, 24);
+      const regionSig = ocrFrameSignature(source, 32, ocrListRegion(source));
+      const fullDiff = ocrSignatureDiff(fullSig, ocrCapture.lastFullSig);
+      const regionDiff = ocrSignatureDiff(regionSig, ocrCapture.lastRegionSig);
+      ocrCapture.lastFullSig = fullSig;
+      ocrCapture.lastRegionSig = regionSig;
 
-      if (diff > OCR_CHANGE_THRESHOLD) {
+      const s = OCR_SENSITIVITY[state.ocrSensitivity] || OCR_SENSITIVITY.medium;
+      const live = $('ocrLiveStatus');
+      if (live) {
+        live.textContent = `画面 ${fullDiff.toFixed(1)} / 一覧 ${regionDiff.toFixed(1)} / 取り込み ${ocrImages.length}枚`;
+      }
+
+      if (fullDiff > s.full || regionDiff > s.region) {
         ocrCapture.changed = true;
         ocrCapture.stableCount = 0;
         return;
       }
       if (!ocrCapture.changed) return;
-      if (diff > OCR_STABLE_THRESHOLD) {
+      if (fullDiff > s.stableFull || regionDiff > s.stableRegion) {
         ocrCapture.stableCount = 0;
         return;
       }
       ocrCapture.stableCount++;
       if (ocrCapture.stableCount >= 2) {
-        captureOcrFrame();
+        captureOcrFrame(source);
         ocrCapture.changed = false;
         ocrCapture.stableCount = 0;
       }
     }
 
+    async function startFrameProcessor(stream) {
+      if (!('MediaStreamTrackProcessor' in window)) return false;
+      try {
+        const track = stream.getVideoTracks()[0];
+        if (!track) return false;
+        const processor = new MediaStreamTrackProcessor({ track });
+        const reader = processor.readable.getReader();
+        ocrCapture.processorReader = reader;
+        (async () => {
+          while (true) {
+            let result;
+            try {
+              result = await reader.read();
+            } catch (err) {
+              break;
+            }
+            const { value: frame, done } = result;
+            if (done) break;
+            if (ocrCapture.autoActive) {
+              const now = performance.now();
+              if (now - ocrCapture.lastSampleAt >= 200) {
+                ocrCapture.lastSampleAt = now;
+                sampleCaptureSource(frame);
+              }
+            }
+            frame.close();
+          }
+          ocrCapture.processorReader = null;
+          if (ocrCapture.autoActive) startVideoFrameLoop();
+        })();
+        return true;
+      } catch (err) {
+        console.warn('MediaStreamTrackProcessor failed:', err);
+        return false;
+      }
+    }
+
+    function startVideoFrameLoop() {
+      if (ocrCapture.frameLoopStarted) return;
+      const video = ocrCapture.video;
+      if (!video) return;
+      ocrCapture.frameLoopStarted = true;
+      if ('requestVideoFrameCallback' in video) {
+        const loop = () => {
+          if (!ocrCapture.video) return;
+          if (ocrCapture.autoActive) {
+            const now = performance.now();
+            if (now - ocrCapture.lastSampleAt >= 200) {
+              ocrCapture.lastSampleAt = now;
+              sampleCaptureSource(video);
+            }
+          }
+          video.requestVideoFrameCallback(loop);
+        };
+        video.requestVideoFrameCallback(loop);
+      } else {
+        ocrCapture.sampleTimer = setInterval(() => {
+          if (ocrCapture.autoActive) sampleCaptureSource(video);
+        }, 250);
+      }
+    }
+
     function startAutoCapture() {
-      if (ocrCapture.sampleTimer) return;
-      ocrCapture.lastSig = null;
+      if (ocrCapture.autoActive) return;
+      ocrCapture.autoActive = true;
+      ocrCapture.lastFullSig = null;
+      ocrCapture.lastRegionSig = null;
       ocrCapture.changed = true;
       ocrCapture.stableCount = 0;
-      ocrCapture.lastCaptureAt = 0;
-      ocrCapture.sampleTimer = setInterval(() => {
-        if (ocrImages.length >= OCR_MAX_IMAGES) {
-          stopAutoCapture();
-          return;
-        }
-        sampleCaptureFrame();
-      }, 250);
+      ocrCapture.lastSampleAt = 0;
+      if (!ocrCapture.processorReader) startVideoFrameLoop();
       $('ocrCaptureAuto').disabled = true;
       ocrSetStatus('フレーム変化を検出して自動取り込み中です。スクロールを止めると、その画面を保存します。');
     }
 
     function stopAutoCapture() {
+      ocrCapture.autoActive = false;
       if (ocrCapture.sampleTimer) {
         clearInterval(ocrCapture.sampleTimer);
         ocrCapture.sampleTimer = null;
@@ -3392,11 +3511,20 @@
 
     function stopOcrCapture() {
       stopAutoCapture();
+      if (ocrCapture.processorReader) {
+        try {
+          ocrCapture.processorReader.cancel();
+        } catch (err) { /* ignore */ }
+        ocrCapture.processorReader = null;
+      }
+      ocrCapture.frameLoopStarted = false;
       if (ocrCapture.stream) {
         for (const track of ocrCapture.stream.getTracks()) track.stop();
         ocrCapture.stream = null;
       }
       ocrCapture.video = null;
+      const live = $('ocrLiveStatus');
+      if (live) live.textContent = '';
       $('ocrCaptureFrame').disabled = true;
       $('ocrCaptureAuto').disabled = true;
       $('ocrCaptureStop').disabled = true;
@@ -4000,6 +4128,10 @@
         e.target.closest('.toggle').classList.toggle('on', e.target.checked);
         saveSettings();
       });
+      $('ocrSensitivity').addEventListener('change', (e) => {
+        state.ocrSensitivity = e.target.value;
+        saveSettings();
+      });
       $('ocrRun').addEventListener('click', runOcr);
 
       $('onlyPurchasable').addEventListener('change', (e) => {
@@ -4124,6 +4256,7 @@
       $('ocrFastMode-wrap').classList.toggle('on', state.ocrFastMode);
       $('ocrAutoCrop').checked = state.ocrAutoCrop;
       $('ocrAutoCrop-wrap').classList.toggle('on', state.ocrAutoCrop);
+      $('ocrSensitivity').value = state.ocrSensitivity;
       $('optBudget').value = String(state.optBudget);
       $('optUseFilter').checked = state.optUseFilter;
       $('optUseFilter-wrap').classList.toggle('on', state.optUseFilter);
