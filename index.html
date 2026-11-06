@@ -979,6 +979,8 @@
           <button class="btn" id="ocrCaptureFrame" type="button" disabled>この画面を取り込む</button>
           <button class="btn" id="ocrCaptureAuto" type="button" disabled>連続取り込み</button>
           <button class="btn" id="ocrCaptureStop" type="button" disabled>停止</button>
+          <span class="settings-note" id="ocrCaptureHint"></span>
+          <button class="btn tiny" id="ocrCopyUrl" type="button">URLをコピー</button>
           <button class="btn primary" id="ocrRun" type="button" disabled>認識開始</button>
         </div>
         <div class="ocr-drop" id="ocrDrop">ここに画像をドラッグ＆ドロップ（複数可）</div>
@@ -1055,6 +1057,7 @@
           <li><b>獲得SPから最大評価を計算</b>は、入力したSP予算内で合計評価点が最大になるスキルの組み合わせを求めます。同じグループは最上位1つを選び、下位スキルのSPもコストに含めます。ヒントLv・切れ者・適性倍率を反映します。固有・継承固有などSP対象外のスキルは計算対象外です。</li>
           <li>「結果を選択に反映」を押すと、計算結果のSP取得スキルを選択状態にします（SP対象外の選択は保持）。</li>
           <li><b>画像認識</b>は「画像を追加」またはドラッグ＆ドロップ、クリップボード貼り付け、画面キャプチャに対応しています。画像はブラウザ内で処理され、外部に送信されません（OCRエンジンの取得のみネット接続を使用）。</li>
+          <li>画面キャプチャは<b>Chrome/Edge</b>で開いた場合に利用できます。OpenCode内蔵ブラウザでは権限が拒否されるため、「画像を追加」または「クリップボードから貼り付け」を使ってください。</li>
           <li><b>スキル取得画面</b>モードでは、スキル名・ヒントLv・SPを認識し、複数画像の結果をスキルごとに統合します。スクロールしながら複数枚取り込んでください。</li>
           <li><b>ウマ娘の適性</b>モードでは、キャラ名・衣装名を認識し、カードの初期適性を設定します。候補が複数ある場合は選択できます。</li>
           <li>OCRは固定座標を使わず、画像全体を正規化して認識するため、ウィンドウサイズが変わっても動作します。初回は日本語OCRデータのダウンロードで時間がかかります。</li>
@@ -2570,7 +2573,35 @@
         $('ocrCaptureStart').disabled = true;
         ocrSetStatus('画面キャプチャ中です。ゲーム画面を共有し、スクロールしながら「この画面を取り込む」を押してください。');
       } catch (err) {
-        ocrSetStatus(`画面キャプチャを開始できませんでした: ${err.message || err}`);
+        if (err && err.name === 'NotAllowedError') {
+          ocrSetStatus(
+            '画面キャプチャが許可されませんでした。OpenCode内蔵ブラウザでは使用できません。' +
+            'Chrome/Edgeでこのページを開くか、「画像を追加」「クリップボードから貼り付け」を使ってください。'
+          );
+        } else if (err && err.name === 'NotFoundError') {
+          ocrSetStatus('共有できる画面が見つかりませんでした。ゲーム画面を開いた状態で再試行してください。');
+        } else {
+          ocrSetStatus(`画面キャプチャを開始できませんでした: ${err && err.message ? err.message : err}`);
+        }
+      }
+    }
+
+    function updateOcrCaptureHint() {
+      const hint = $('ocrCaptureHint');
+      if (!hint) return;
+      const inApp = /OpenCode|Electron/i.test(navigator.userAgent);
+      hint.textContent = inApp
+        ? '内蔵ブラウザでは画面キャプチャ不可。Chrome/Edgeで開いてください。'
+        : '画面キャプチャはChrome/Edge推奨。';
+    }
+
+    async function copyOcrUrl() {
+      const url = location.href.split('?')[0];
+      try {
+        await navigator.clipboard.writeText(url);
+        ocrSetStatus(`URLをコピーしました。Chrome/Edgeのアドレス欄に貼り付けて開いてください: ${url}`);
+      } catch (err) {
+        ocrSetStatus(`Chrome/Edgeで次のURLを開いてください: ${url}`);
       }
     }
 
@@ -3205,6 +3236,7 @@
       $('ocrCaptureFrame').addEventListener('click', captureOcrFrame);
       $('ocrCaptureAuto').addEventListener('click', startAutoCapture);
       $('ocrCaptureStop').addEventListener('click', stopOcrCapture);
+      $('ocrCopyUrl').addEventListener('click', copyOcrUrl);
       $('ocrRun').addEventListener('click', runOcr);
 
       $('onlyPurchasable').addEventListener('change', (e) => {
@@ -3324,6 +3356,7 @@
       renderSettings();
       renderAptFilter();
       renderOcrThumbs();
+      updateOcrCaptureHint();
       $('optBudget').value = String(state.optBudget);
       $('optUseFilter').checked = state.optUseFilter;
       $('optUseFilter-wrap').classList.toggle('on', state.optUseFilter);
