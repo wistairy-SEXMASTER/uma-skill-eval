@@ -438,6 +438,45 @@ def update_index_cache_version(index_path: Path, version: str) -> None:
             f.write(updated)
 
 
+def extract_game_font(db_path: Path, out_path: Path) -> bool:
+    """Unity の resources.assets からゲーム内フォントを抽出する。
+
+    ライセンス上、抽出したフォントは Git にコミットしない（.gitignore 済み）。
+    """
+    try:
+        resources = db_path.parents[2] / "resources.assets"
+    except IndexError:
+        return False
+    if not resources.is_file():
+        return False
+    if out_path.is_file() and out_path.stat().st_mtime >= resources.stat().st_mtime:
+        return True
+    try:
+        import UnityPy  # type: ignore
+    except Exception as exc:
+        print(f"[WARN] UnityPy が無いためフォント抽出をスキップします: {exc}")
+        return False
+    try:
+        env = UnityPy.load(str(resources))
+        for obj in env.objects:
+            if obj.type.name != "Font":
+                continue
+            data = obj.read()
+            name = getattr(data, "m_Name", "")
+            if name not in ("Dynamic01", "Dynamic01_Normal_Horse"):
+                continue
+            font_data = getattr(data, "m_FontData", None)
+            if not font_data:
+                continue
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(bytes(font_data))
+            print(f"フォント抽出: {name} -> {out_path}")
+            return True
+    except Exception as exc:
+        print(f"[WARN] フォント抽出に失敗しました: {exc}")
+    return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="master.mdb からスキル評価点/SPを抽出")
     parser.add_argument("--db", default=os.environ.get("UMA_MASTER_DB", DEFAULT_DB), help="master.mdb のパス")
@@ -486,6 +525,8 @@ def main() -> int:
         cards,
     )
     update_index_cache_version(Path(args.js).resolve().parent.parent / "index.html", str(now))
+    font_path = Path(args.js).resolve().parent.parent / "assets" / "umamusume-font.ttf"
+    extract_game_font(db_path, font_path)
 
     # レポート
     by_type = Counter(r["type"] for r in rows if r["available"])
@@ -493,6 +534,7 @@ def main() -> int:
     print(f"最終更新: {meta['db_mtime']}  / 抽出: {meta['generated_at']}")
     print(f"スキル数: {len(rows)}  (期限切れ {sum(1 for r in rows if not r['available'])} 件を含む)")
     print(f"ウマ娘カード: {len(cards)} 件")
+    print(f"ゲーム内フォント: {font_path}")
     print("種別:", ", ".join(f"{k}={v}" for k, v in by_type.most_common()))
     purch = [r for r in rows if r["purchasable"] and r["available"]]
     print(f"SP取得可能: {len(purch)} 件")

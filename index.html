@@ -1067,6 +1067,7 @@
           <li>画面キャプチャは<b>Chrome/Edge</b>で開いた場合に利用できます。OpenCode内蔵ブラウザでは権限が拒否されるため、「画像を追加」または「クリップボードから貼り付け」を使ってください。</li>
           <li>「<b>変化時取り込み</b>」はスクロールのフレーム変化を検出し、スクロールが止まった画面を自動保存します（最大120枚）。100件規模のヒントも画面を分けて取り込めます。</li>
           <li><b>高速モード</b>（初期オン）はOCRを1パス・1400px・2並列で処理します。精度を優先する場合はオフにしてください。</li>
+          <li>ゲーム内フォント（UMAMUSUME-RodinWanpaku）を抽出して候補名の画像照合に使用します。<b>○ / ◎ / ×</b> の区別やOCRの文字誤りを補正します。フォントが無い場合は通常のOCRのみ動作します。</li>
           <li><b>スキル取得画面</b>モードでは、スキル名・ヒントLv・SPを認識し、複数画像の結果をスキルごとに統合します。スクロールしながら複数枚取り込んでください。</li>
           <li><b>ウマ娘の適性</b>モードでは、キャラ名・衣装名を認識し、カードの初期適性を設定します。候補が複数ある場合は選択できます。</li>
           <li>OCRは固定座標を使わず、画像全体を正規化して認識するため、ウィンドウサイズが変わっても動作します。初回は日本語OCRデータのダウンロードで時間がかかります。</li>
@@ -1109,7 +1110,7 @@
     </div>
   </div>
 
-  <script src="data/skills.js?v=1793962968"></script>
+  <script src="data/skills.js?v=1793976347"></script>
   <script>
   (() => {
     'use strict';
@@ -1236,6 +1237,7 @@
 
     // ---------- image recognition (OCR) ----------
     const OCR_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    const OCR_FONT_URL = 'assets/umamusume-font.ttf';
     const OCR_MAX_IMAGES = 120;
     const OCR_CHANGE_THRESHOLD = 10;
     const OCR_STABLE_THRESHOLD = 4;
@@ -1244,6 +1246,10 @@
     let ocrWorkers = [];
     let ocrWorkerPromise = null;
     let ocrImageSeq = 0;
+    let ocrFontPromise = null;
+    let ocrFontReady = false;
+    const ocrFontCache = new Map();
+    const ocrFontCharCache = new Map();
     let ocrCapture = {
       stream: null,
       video: null,
@@ -2107,22 +2113,27 @@
       return ocrCharaIndex;
     }
 
-    function ocrBestSkillMatch(norm) {
-      if (!norm || norm.length < 2) return null;
-      if (/^\d+$/.test(norm)) return null;
-      if (/^(スキル|ヒント|獲得|SP|閉じる|戻る|次へ|前へ|確認|キャンセル|ウマ娘|育成|レース)$/.test(norm)) return null;
+    function ocrSkillCandidates(norm, limit = 8, minScore = 0.35) {
+      if (!norm || norm.length < 2) return [];
+      if (/^\d+$/.test(norm)) return [];
+      if (/^(スキル|ヒント|獲得|SP|閉じる|戻る|次へ|前へ|確認|キャンセル|ウマ娘|育成|レース)$/.test(norm)) return [];
       const lineBigrams = ocrBigrams(norm);
-      let best = null;
+      const scored = [];
       for (const entry of getOcrSkillIndex()) {
         if (!entry.norm) continue;
         const maxLen = Math.max(entry.norm.length, norm.length);
         if (Math.abs(entry.norm.length - norm.length) > Math.max(6, Math.round(maxLen * 0.8))) continue;
         const score = ocrSimilarity(norm, entry.norm, lineBigrams, entry.bigrams);
-        if (!best || score > best.score) best = { skill: entry.skill, score };
+        if (score >= minScore) scored.push({ skill: entry.skill, score });
       }
-      if (!best) return null;
-      const minScore = norm.length <= 3 ? 0.78 : 0.55;
-      return best.score >= minScore ? best : null;
+      scored.sort((a, b) => b.score - a.score);
+      return scored.slice(0, limit);
+    }
+
+    function ocrBestSkillMatch(norm) {
+      const minScore = norm && norm.length <= 3 ? 0.78 : 0.55;
+      const list = ocrSkillCandidates(norm, 1, minScore);
+      return list.length ? list[0] : null;
     }
 
     function ocrExtractCost(text) {
@@ -2197,7 +2208,7 @@
       return rows;
     }
 
-    function ocrParseSkillData(data) {
+    function ocrParseSkillData(data, canvas) {
       const rawText = String(data.text || '');
       const lines = (Array.isArray(data.lines) && data.lines.length
         ? data.lines
@@ -2221,16 +2232,15 @@
           const norm = ocrNormalizeText(line.text);
           if (norm.length < 2) continue;
           let candidate = ocrBestSkillMatch(norm.replace(/\d{2,4}$/, ''));
-          if (candidate) candidate = { ...candidate, line, span: 1 };
+          if (candidate) candidate = { ...candidate, line, span: 1, normUsed: norm };
 
           if (!candidate || candidate.score < 0.75) {
             const nextRowText = rows[ri + 1]?.lines.map((l) => l.text).join('') || '';
             if (nextRowText) {
-              const merged = ocrBestSkillMatch(
-                (norm + ocrNormalizeText(nextRowText)).replace(/\d{2,4}$/, '')
-              );
+              const mergedNorm = norm + ocrNormalizeText(nextRowText);
+              const merged = ocrBestSkillMatch(mergedNorm.replace(/\d{2,4}$/, ''));
               if (merged && (!candidate || merged.score > candidate.score)) {
-                candidate = { ...merged, line, span: 2 };
+                candidate = { ...merged, line, span: 2, normUsed: mergedNorm };
               }
             }
           }
@@ -2238,10 +2248,30 @@
         }
 
         if (!best) {
-          const match = ocrBestSkillMatch(ocrNormalizeText(rowText).replace(/\d{2,4}$/, ''));
-          if (match) best = { ...match, line: row.lines[0] || null, span: 1 };
+          const fallbackNorm = ocrNormalizeText(rowText);
+          const match = ocrBestSkillMatch(fallbackNorm.replace(/\d{2,4}$/, ''));
+          if (match) best = { ...match, line: row.lines[0] || null, span: 1, normUsed: fallbackNorm };
         }
         if (!best) continue;
+
+        // ゲーム内フォントで候補を画像照合し、OCRの文字誤りを補正する
+        if (ocrFontReady && canvas && best.line && best.line.bbox && best.normUsed) {
+          const lineCanvas = ocrCropLine(canvas, best.line.bbox);
+          if (lineCanvas) {
+            const candidates = ocrSkillCandidates(best.normUsed.replace(/\d{2,4}$/, ''), 12, 0.15);
+            if (candidates.length) {
+              const reranked = ocrFontRerank(candidates, lineCanvas);
+              if (reranked && Math.max(reranked.imageScore || 0, reranked.suffixScore || 0) >= 0.2) {
+                best = {
+                  ...best,
+                  skill: reranked.skill,
+                  score: Math.max(best.score, reranked.combined),
+                  imageScore: reranked.imageScore,
+                };
+              }
+            }
+          }
+        }
 
         // 同じ行の右側（ヒントLv・SP）を優先して読む
         let rightText = '';
@@ -2514,6 +2544,236 @@
       return hex;
     }
 
+    // ---------- game font (UMAMUSUME-RodinWanpaku) based reranking ----------
+
+    function loadOcrFont() {
+      if (ocrFontPromise) return ocrFontPromise;
+      ocrFontPromise = (async () => {
+        try {
+          if (!('FontFace' in window) || !document.fonts) return false;
+          const face = new FontFace('UmaGameFont', `url(${OCR_FONT_URL})`);
+          await face.load();
+          document.fonts.add(face);
+          ocrFontReady = true;
+          return true;
+        } catch (err) {
+          console.warn('game font load failed:', err);
+          return false;
+        }
+      })();
+      return ocrFontPromise;
+    }
+
+    function ocrOtsuThreshold(gray) {
+      const hist = new Array(256).fill(0);
+      for (let i = 0; i < gray.length; i++) hist[gray[i]]++;
+      const total = gray.length;
+      let sum = 0;
+      for (let i = 0; i < 256; i++) sum += i * hist[i];
+      let sumB = 0;
+      let wB = 0;
+      let max = 0;
+      let threshold = 127;
+      for (let i = 0; i < 256; i++) {
+        wB += hist[i];
+        if (!wB) continue;
+        const wF = total - wB;
+        if (!wF) break;
+        sumB += i * hist[i];
+        const mB = sumB / wB;
+        const mF = (sum - sumB) / wF;
+        const between = wB * wF * (mB - mF) * (mB - mF);
+        if (between > max) {
+          max = between;
+          threshold = i;
+        }
+      }
+      return threshold;
+    }
+
+    function ocrTrimRect(canvas) {
+      const w = canvas.width;
+      const h = canvas.height;
+      if (!w || !h) return null;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const d = ctx.getImageData(0, 0, w, h).data;
+      const gray = new Uint8Array(w * h);
+      for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+        gray[j] = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
+      }
+      const threshold = ocrOtsuThreshold(gray);
+      let minX = w;
+      let minY = h;
+      let maxX = -1;
+      let maxY = -1;
+      for (let y = 0; y < h; y++) {
+        const row = y * w;
+        for (let x = 0; x < w; x++) {
+          if (gray[row + x] < threshold) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      if (maxX < minX || maxY < minY) return null;
+      return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+    }
+
+    function ocrNormalizedTextImage(canvas, expectedAspect = null) {
+      const rect = ocrTrimRect(canvas);
+      if (!rect) return null;
+      let cropW = rect.w;
+      if (expectedAspect && expectedAspect > 0) {
+        cropW = Math.min(rect.w, Math.max(1, Math.round(rect.h * expectedAspect)));
+      }
+      const out = document.createElement('canvas');
+      out.width = 192;
+      out.height = 48;
+      const ctx = out.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, 192, 48);
+      ctx.drawImage(canvas, rect.x, rect.y, cropW, rect.h, 0, 0, 192, 48);
+      const d = ctx.getImageData(0, 0, 192, 48).data;
+      const gray = new Uint8Array(192 * 48);
+      for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+        gray[j] = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
+      }
+      return gray;
+    }
+
+    function ocrRenderNameCanvas(name) {
+      const size = 64;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.font = `${size}px "UmaGameFont", sans-serif`;
+      const width = Math.max(32, Math.ceil(ctx.measureText(name).width) + 24);
+      const height = 96;
+      canvas.width = width;
+      canvas.height = height;
+      const c = canvas.getContext('2d', { willReadFrequently: true });
+      c.fillStyle = '#fff';
+      c.fillRect(0, 0, width, height);
+      c.fillStyle = '#000';
+      c.font = `${size}px "UmaGameFont", sans-serif`;
+      c.textBaseline = 'middle';
+      c.fillText(name, 12, height / 2);
+      return canvas;
+    }
+
+    function ocrFontNameSignature(name) {
+      if (ocrFontCache.has(name)) return ocrFontCache.get(name);
+      const rendered = ocrRenderNameCanvas(name);
+      const rect = ocrTrimRect(rendered);
+      if (!rect) {
+        ocrFontCache.set(name, null);
+        return null;
+      }
+      const norm = ocrNormalizedTextImage(rendered);
+      const sig = { norm, aspect: rect.w / rect.h };
+      ocrFontCache.set(name, sig);
+      return sig;
+    }
+
+    function ocrFontSimilarity(lineCanvas, name) {
+      if (!ocrFontReady || !lineCanvas) return 0;
+      const sig = ocrFontNameSignature(name);
+      if (!sig) return 0;
+      const lineNorm = ocrNormalizedTextImage(lineCanvas, sig.aspect);
+      if (!lineNorm) return 0;
+      const a = lineNorm;
+      const b = sig.norm;
+      const ta = ocrOtsuThreshold(a);
+      const tb = ocrOtsuThreshold(b);
+      let inter = 0;
+      let union = 0;
+      for (let i = 0; i < a.length; i++) {
+        const da = a[i] < ta;
+        const db = b[i] < tb;
+        if (da && db) inter++;
+        if (da || db) union++;
+      }
+      return union ? inter / union : 0;
+    }
+
+    function ocrFontCharSignature(ch) {
+      if (ocrFontCharCache.has(ch)) return ocrFontCharCache.get(ch);
+      const rendered = ocrRenderNameCanvas(ch);
+      const norm = ocrNormalizedTextImage(rendered);
+      ocrFontCharCache.set(ch, norm);
+      return norm;
+    }
+
+    function ocrFontSuffixSimilarity(lineCanvas, name) {
+      if (!ocrFontReady || !lineCanvas || !name) return 0;
+      const lineRect = ocrTrimRect(lineCanvas);
+      const fullSig = ocrFontNameSignature(name);
+      if (!lineRect || !fullSig) return 0;
+      const nameW = Math.min(lineRect.w, Math.max(1, Math.round(lineRect.h * fullSig.aspect)));
+      const nameEndX = lineRect.x + nameW;
+      const startX = Math.max(lineRect.x, nameEndX - lineRect.h);
+      const w = Math.max(1, nameEndX - startX);
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = lineRect.h;
+      c.getContext('2d', { willReadFrequently: true })
+        .drawImage(lineCanvas, startX, lineRect.y, w, lineRect.h, 0, 0, w, lineRect.h);
+      const lineSig = ocrNormalizedTextImage(c);
+      const charSig = ocrFontCharSignature(name.slice(-1));
+      if (!lineSig || !charSig) return 0;
+      const ta = ocrOtsuThreshold(lineSig);
+      const tb = ocrOtsuThreshold(charSig);
+      let inter = 0;
+      let union = 0;
+      for (let i = 0; i < lineSig.length; i++) {
+        const da = lineSig[i] < ta;
+        const db = charSig[i] < tb;
+        if (da && db) inter++;
+        if (da || db) union++;
+      }
+      return union ? inter / union : 0;
+    }
+
+    function ocrCropLine(canvas, bbox) {
+      if (!canvas || !bbox) return null;
+      const x = Math.max(0, Math.floor(bbox.x0));
+      const y = Math.max(0, Math.floor(bbox.y0));
+      const w = Math.max(1, Math.min(canvas.width - x, Math.ceil(bbox.x1 - bbox.x0)));
+      const h = Math.max(1, Math.min(canvas.height - y, Math.ceil(bbox.y1 - bbox.y0)));
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+      if (!canvas._ocrInverted) {
+        const img = ctx.getImageData(0, 0, w, h);
+        const d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          d[i] = 255 - d[i];
+          d[i + 1] = 255 - d[i + 1];
+          d[i + 2] = 255 - d[i + 2];
+        }
+        ctx.putImageData(img, 0, 0);
+      }
+      return c;
+    }
+
+    function ocrFontRerank(candidates, lineCanvas) {
+      if (!candidates.length) return null;
+      if (!ocrFontReady || !lineCanvas) return candidates[0];
+      let best = null;
+      for (const cand of candidates) {
+        const imageScore = ocrFontSimilarity(lineCanvas, cand.skill.name);
+        const suffixScore = ocrFontSuffixSimilarity(lineCanvas, cand.skill.name);
+        const combined = cand.score * 0.35 + imageScore * 0.3 + suffixScore * 0.35;
+        if (!best || combined > best.combined) {
+          best = { ...cand, imageScore, suffixScore, combined };
+        }
+      }
+      return best;
+    }
+
     function ocrNormalizeCanvas(source) {
       const targetWidth = state.ocrFastMode ? 1400 : 1800;
       const scale = Math.min(2.5, Math.max(1, targetWidth / Math.max(1, source.width)));
@@ -2543,6 +2803,7 @@
         d[i + 3] = 255;
       }
       ctx.putImageData(imageData, 0, 0);
+      canvas._ocrInverted = invert;
       return canvas;
     }
 
@@ -2550,6 +2811,7 @@
       const canvas = document.createElement('canvas');
       canvas.width = source.width;
       canvas.height = source.height;
+      canvas._ocrInverted = source._ocrInverted;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(source, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -2627,6 +2889,7 @@
       runBtn.disabled = true;
       ocrSetStatus('OCRを実行中です...');
       try {
+        await loadOcrFont();
         const workers = await getOcrWorkers(2);
         const results = new Array(ocrImages.length);
         let nextIndex = 0;
@@ -2651,7 +2914,7 @@
               const recognized = await worker.recognize(variants[v]);
               const data = recognized && recognized.data ? recognized.data : recognized;
               if (ocrMode === 'skills') {
-                const parsed = ocrParseSkillData(data);
+                const parsed = ocrParseSkillData(data, variants[v]);
                 if (!bestParsed || parsed.results.length > bestParsed.results.length) {
                   bestParsed = parsed;
                   bestRaw = parsed.rawText;

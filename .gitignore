@@ -16,3 +16,9 @@ explore.py
 inspect*.py
 inspect*.txt
 tables.txt
+
+# ゲーム内フォント（ライセンス上、再配布しない）
+assets/umamusume-font.ttf
+
+# OCR精度確認用のスクリーンショット（著作物のためコミットしない）
+samples/

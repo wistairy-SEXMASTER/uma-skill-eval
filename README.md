@@ -80,6 +80,7 @@ py extract_skills.py --db master.mdb --out out --js data/skills.js
 
 - Pythonは `py` コマンド（Python 3.13）を想定しています。
 - DBは読み取り専用（`mode=ro`）で開きます。
+- ゲーム内フォントも自動抽出する場合は `py -m pip install UnityPy` を実行してください。フォントは `assets/umamusume-font.ttf` に保存されます（Git管理外）。
 - 抽出元の既定パス:  
   `C:\Program Files (x86)\STEAM\steamapps\common\UmamusumePrettyDerby_Jpn\UmamusumePrettyDerby_Jpn_Data\Persistent\master\master.mdb`
 
@@ -216,6 +217,8 @@ CSV出力では、ヒント割引前と割引後の両方を出力します。
 - **100件規模のヒント**にも対応しています。画面を分けて取り込むと、スキルID単位で重複を統合します。
 - **高速モード**（初期オン）では、OCRを1パス・1400px・2並列ワーカーで実行します。オフにすると二値化バリアントも試すため精度重視になります。
 - 行の位置（bbox）からスキル名とヒントLv/SPを同じ行としてグループ化し、対応付けの精度を上げています。
+- ゲーム内フォント（**UMAMUSUME-RodinWanpaku Pro EB**）を `resources.assets` から抽出し、候補スキル名の画像照合に使用します。これにより `○` / `◎` / `×` などの紛らわしい表記やOCRの文字誤りを補正します。
+- フォントは `assets/umamusume-font.ttf` に保存します。ライセンス上Gitにはコミットしません。`py extract_skills.py` 実行時に自動抽出します（`pip install UnityPy` が必要）。フォントが無い場合もOCRは動作します（画像照合のみスキップ）。
 - **スキル取得画面モード**:
   - スキル名を辞書とファジーマッチングし、近くのテキストからヒントLvとSPを読み取ります。
   - ヒントLvが読めない場合は、表示SPとスキル本来のSPからヒントLvを逆算します。
@@ -294,6 +297,7 @@ CSV出力では、ヒント割引前と割引後の両方を出力します。
 - 最大評価の計算は、SPで取得できるスキルだけを対象にします。固有・継承固有などSP対象外のスキルは含みません。
 - 画像認識は初回のみOCRエンジンと日本語データをCDNから取得します（ネット接続が必要）。画像自体は外部に送信されません。
 - OCRの精度は画像の解像度・圧縮・UIの表示サイズに依存します。PNGのスクリーンショットを推奨します。認識結果は必ず確認してください。
+- ゲーム内フォントは著作物のため、`assets/umamusume-font.ttf` はGitにコミットしません。各自のゲームファイルから `py extract_skills.py` で抽出してください。
 - マイナス系スキル（`group_rate = -1` または評価点が負）は初期状態では非表示です。「マイナス系を含む」をオンにすると表示されます。
 - 特殊スキル（ストーリー・イベント用）と期限切れスキルは `data/skills.js` には収録していません。
 - ゲームのアップデートで評価点・SPが変わった場合は、`py extract_skills.py` を再実行してデータを更新してください。
