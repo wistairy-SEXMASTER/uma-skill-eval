@@ -56,7 +56,22 @@
 | ファイル | 内容 |
 | --- | --- |
 | `index.html` | ViteのエントリーHTML（開発用） |
-| `src/main.js` | ビューア本体のJavaScript |
+| `src/main.js` | エントリーポイント（CSS読み込み・初期化） |
+| `src/app.js` | イベント配線・初期化 |
+| `src/core/constants.js` | アプリ全体の定数 |
+| `src/core/data.js` | データ読み込み・派生インデックス |
+| `src/core/state.js` | 可変状態・localStorage永続化 |
+| `src/core/utils.js` | DOM・文字列・数値のユーティリティ |
+| `src/core/hints.js` | ヒントLv・切れ者のSP割引 |
+| `src/core/aptitude.js` | 適性フィルタ・評価点/SPの派生計算 |
+| `src/core/optimizer-state.js` | 最適化結果の共有状態 |
+| `src/features/filters.js` | 検索・種別・効果・適性フィルタ、カード/設定UI |
+| `src/features/table.js` | スキル一覧テーブル・選択・ソート |
+| `src/features/summary.js` | 合計評価点/SP/効率の計算・CSV出力 |
+| `src/features/evolution.js` | カード固有/シナリオ進化の表示・選択 |
+| `src/features/optimizer.js` | 獲得SPからの最大評価計算 |
+| `src/features/ocr.js` | 画像認識（OCR） |
+| `src/features/capture.js` | 画面キャプチャ・フレーム変化検出 |
 | `src/style.css` | ビューアのスタイル |
 | `dist/index.html` | ビルド後の単一ファイル版（配布・直接利用用） |
 | `data/skills.js` | ビューア用データ（ESモジュール `export const SKILL_DATA`） |
