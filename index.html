@@ -2150,6 +2150,38 @@
       return list.length ? list[0] : null;
     }
 
+    function ocrSubstringSimilarity(a, b, aBigrams, bBigrams) {
+      const dist = ocrLevenshtein(a, b);
+      const edit = 1 - dist / Math.max(a.length, b.length);
+      const bg = ocrJaccard(aBigrams || ocrBigrams(a), bBigrams || ocrBigrams(b));
+      return 0.8 * edit + 0.2 * bg;
+    }
+
+    function ocrBestSkillSubstringMatch(norm) {
+      if (!norm || norm.length < 2) return null;
+      let best = null;
+      for (const entry of getOcrSkillIndex()) {
+        if (!entry.norm) continue;
+        const n = entry.norm.length;
+        for (const len of [n - 1, n, n + 1]) {
+          if (len < 2 || len > norm.length) continue;
+          if (norm.length > 8 && len < 4) continue;
+          for (let start = 0; start <= norm.length - len; start++) {
+            const sub = norm.slice(start, start + len);
+            const coverage = len / norm.length;
+            if (norm.length > 12 && coverage < 0.4) continue;
+            const score = ocrSubstringSimilarity(sub, entry.norm, ocrBigrams(sub), entry.bigrams);
+            if (score < 0.55) continue;
+            const adjusted = score * (0.8 + 0.2 * coverage);
+            if (!best || adjusted > best.adjusted) {
+              best = { skill: entry.skill, score, adjusted, sub };
+            }
+          }
+        }
+      }
+      return best;
+    }
+
     function ocrExtractCost(text) {
       const norm = String(text || '').normalize('NFKC');
       const nums = [...norm.matchAll(/\d{2,4}/g)]
@@ -2243,9 +2275,11 @@
         let best = null;
 
         for (const line of row.lines) {
+          if (line.bbox && canvas && line.bbox.x0 > canvas.width * 0.55) continue;
+          if (/試験ボーナス|進化条件達成|説明省略|スキルセット|リセット|決定/.test(line.text)) continue;
           const norm = ocrNormalizeText(ocrStripHintCost(line.text));
           if (norm.length < 2) continue;
-          let candidate = ocrBestSkillMatch(norm.replace(/\d{2,4}$/, ''));
+          let candidate = ocrBestSkillSubstringMatch(norm.replace(/\d{2,4}$/, ''));
           if (candidate) candidate = { ...candidate, line, span: 1, normUsed: norm };
 
           if (!candidate || candidate.score < 0.75) {
@@ -2258,18 +2292,19 @@
               }
             }
           }
-          if (candidate && (!best || candidate.score > best.score)) best = candidate;
+          if (candidate && (!best || (candidate.adjusted || candidate.score) > (best.adjusted || best.score))) best = candidate;
         }
 
         if (!best) {
           const fallbackNorm = ocrNormalizeText(rowText);
-          const match = ocrBestSkillMatch(fallbackNorm.replace(/\d{2,4}$/, ''));
+          const match = ocrBestSkillSubstringMatch(fallbackNorm.replace(/\d{2,4}$/, ''));
           if (match) best = { ...match, line: row.lines[0] || null, span: 1, normUsed: fallbackNorm };
         }
         if (!best) continue;
 
         // ゲーム内フォントで候補を画像照合し、OCRの文字誤りを補正する
-        if (ocrFontReady && canvas && best.line && best.line.bbox && best.normUsed) {
+        const matchCoverage = best.sub && best.normUsed ? best.sub.length / best.normUsed.length : 1;
+        if (ocrFontReady && canvas && best.line && best.line.bbox && best.normUsed && matchCoverage >= 0.7) {
           const lineCanvas = ocrCropLine(canvas, best.line.bbox);
           if (lineCanvas) {
             const candidates = ocrSkillCandidates(best.normUsed.replace(/\d{2,4}$/, ''), 12, 0.15);
@@ -2987,8 +3022,8 @@
       return { hint, text };
     }
 
-    async function ocrReadBadges(canvas) {
-      const badges = ocrFindBadges(canvas);
+    async function ocrReadBadges(canvas, badgeList = null) {
+      const badges = badgeList || ocrFindBadges(canvas);
       const out = [];
       for (const badge of badges) {
         const { hint, text } = await ocrReadBadge(canvas, badge);
@@ -3159,18 +3194,22 @@
             const cropped = ocrCropForMode(canvas, ocrMode);
             const colorNorm = ocrNormalizeColorCanvas(cropped);
             const gray = ocrNormalizeCanvas(cropped);
+            const badges = ocrMode === 'skills' ? ocrFindBadges(colorNorm) : [];
             const variants = state.ocrFastMode ? [gray] : [gray, ocrOtsuCanvas(gray)];
             let bestParsed = null;
             let bestRaw = '';
+            const collected = [];
+            const rawParts = [];
 
             for (let v = 0; v < variants.length; v++) {
               const recognized = await worker.recognize(variants[v]);
               const data = recognized && recognized.data ? recognized.data : recognized;
               if (ocrMode === 'skills') {
                 const parsed = ocrParseSkillData(data, variants[v]);
-                if (!bestParsed || parsed.results.length > bestParsed.results.length) {
-                  bestParsed = parsed;
-                  bestRaw = parsed.rawText;
+                collected.push(...parsed.results);
+                rawParts.push(parsed.rawText);
+                if (v === 0 && state.ocrFastMode && collected.length < Math.max(3, badges.length)) {
+                  variants.push(ocrOtsuCanvas(gray));
                 }
               } else {
                 const parsed = ocrParseCharacterData(data);
@@ -3181,10 +3220,13 @@
               }
             }
 
-            if (ocrMode === 'skills' && bestParsed) {
+            if (ocrMode === 'skills') {
+              const merged = mergeOcrSkillResults(collected);
+              bestParsed = { results: [...merged.values()], rawText: rawParts.join('\n') };
+              bestRaw = bestParsed.rawText;
               try {
-                const badges = await ocrReadBadges(colorNorm);
-                ocrMergeBadges(bestParsed.results, badges);
+                const badgeHints = await ocrReadBadges(colorNorm, badges);
+                ocrMergeBadges(bestParsed.results, badgeHints);
               } catch (err) {
                 console.warn('badge OCR failed:', err);
               }
