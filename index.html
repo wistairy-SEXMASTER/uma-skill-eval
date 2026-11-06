@@ -254,47 +254,17 @@
     color: #334155;
     font-size: 11.5px;
   }
-  .evo-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  .evo-option {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
+  .evo-select {
+    width: 100%;
+    max-width: 720px;
+    padding: 5px 8px;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: 6px;
     background: #fff;
-    color: var(--muted);
-    font-size: 11.5px;
-    line-height: 1.5;
-    text-align: left;
+    font-size: 12px;
     cursor: pointer;
-    transition: background .12s, border-color .12s, color .12s;
   }
-  .evo-option:hover { background: #f9fafb; }
-  .evo-option.active {
-    border-color: #bfdbfe;
-    background: var(--accent-soft);
-    color: #1d4ed8;
-    font-weight: 600;
-  }
-  .evo-option-label {
-    padding: 0 4px;
-    border-radius: 999px;
-    background: #f1f5f9;
-    color: #64748b;
-    font-size: 10px;
-    font-weight: 500;
-  }
-  .evo-option.active .evo-option-label {
-    background: #dbeafe;
-    color: #1d4ed8;
-  }
-  .evo-option-name { font-weight: 600; }
-  .evo-option-meta { color: #94a3b8; font-size: 10.5px; }
+  .evo-select:hover { border-color: #cbd5e1; }
   .evo-meta { color: #94a3b8; font-size: 10.5px; font-weight: 400; }
   .evo-empty { color: #94a3b8; font-size: 11.5px; }
   .filter-group {
@@ -1160,7 +1130,7 @@
           <li><b>ウマ娘</b>を選ぶと、そのカードの距離適性・脚質適性を「査定設定」に自動反映します。芝・ダート適性は表示のみで、評価点倍率には影響しません。「初期適性に戻す」で再適用できます。</li>
           <li><b>適性フィルタ</b>は距離・馬場・脚質のチップで絞り込みます。スキルの適性条件のうち<b>いずれか1つでも一致</b>すれば表示します（例: ＜短距離・芝＞ は短距離または芝のどちらかで表示）。「汎用を含む」をオフにすると、適性条件のないスキルを除外します。</li>
           <li><b>効果カテゴリ</b>は「速度」「加速」「回復」「緑」「デバフ」「位置取り」「視野」「ゲート」などのチップで絞り込みます。主効果（<code>ability_type_1_1</code>）で分類し、複数効果があるスキルは最初の効果を使います。</li>
-          <li><b>ウマ娘</b>を選ぶと、そのカードが最初から持っている<b>金スキル</b>と、その<b>進化スキル</b>を表示します。各金スキルごとに「通常」と「進化」を切り替えて選択できます。固有スキルは進化の対象外です。</li>
+          <li><b>ウマ娘</b>を選ぶと、そのカードが最初から持っている<b>金スキル</b>と、その<b>進化先スキル</b>を表示します。各金スキルごとのドロップダウンで「通常」または「進化先」を選択できます。固有スキルは進化の対象外です。進化スキルのSPは進化元の金スキルのヒントLv・SPを使用します。</li>
           <li><b>獲得SPから最大評価を計算</b>は、入力したSP予算内で合計評価点が最大になるスキルの組み合わせを求めます。同じグループは最上位1つを選び、下位スキルのSPもコストに含めます。ヒントLv・切れ者・適性倍率を反映します。固有・継承固有などSP対象外のスキルは計算対象外です。<b>選択中のスキルがある場合は、その選択だけを対象に計算します。</b></li>
           <li>「結果を選択に反映」を押すと、計算結果のSP取得スキルを選択状態にします（SP対象外の選択は保持）。</li>
           <li><b>画像認識</b>は「画像を追加」またはドラッグ＆ドロップ、クリップボード貼り付け、画面キャプチャに対応しています。画像はブラウザ内で処理され、外部に送信されません（OCRエンジンの取得のみネット接続を使用）。</li>
@@ -1211,7 +1181,7 @@
     </div>
   </div>
 
-  <script src="data/skills.js?v=1793987890"></script>
+  <script src="data/skills.js?v=1793988694"></script>
   <script>
   (() => {
     'use strict';
@@ -1220,7 +1190,13 @@
     const SKILLS = Array.isArray(DATA.skills) ? DATA.skills : [];
     const META = DATA.meta || {};
     const CARD_INITIAL_SKILLS = DATA.cardInitialSkills || {};
-    const GOLD_SKILL_EVOLUTIONS = DATA.goldSkillEvolutions || {};
+    const CARD_GOLD_SKILL_EVOLUTIONS = DATA.cardGoldSkillEvolutions || {};
+    const EVOLUTION_BASE_MAP = new Map();
+    for (const entries of Object.values(CARD_GOLD_SKILL_EVOLUTIONS)) {
+      for (const entry of entries) {
+        EVOLUTION_BASE_MAP.set(entry.skill_id, entry.base_skill_id);
+      }
+    }
     const EFFECT_ORDER = ['速度', '加速', '回復', '緑', 'デバフ', '位置取り', '視野', 'ゲート', '特殊', 'その他'];
     const EFFECT_CLASS = {
       '速度': 'speed',
@@ -1636,7 +1612,7 @@
       // 2周目: SP割引・下位スキル連鎖・効率
       for (const s of SKILLS) {
         const hint = effectiveHint(s.skill_id);
-        const sp = applyHintDiscount(s.sp, hint);
+        let sp = applyHintDiscount(s.sp, hint);
         let prereqSp = 0;
         let prereqEval = 0;
         for (const lower of CHAINS.get(s.skill_id) || []) {
@@ -1645,15 +1621,44 @@
           }
           prereqEval = Math.max(prereqEval, lower._eval);
         }
-        const totalSp = s.sp == null ? null : sp + prereqSp;
+        let totalSp = s.sp == null ? null : sp + prereqSp;
+        let evolutionBase = null;
+        let evolutionBaseTotalSp = null;
+
+        // 進化スキルは進化元の金スキルのSPをコストとして扱う
+        if (s.sp == null) {
+          const baseId = EVOLUTION_BASE_MAP.get(s.skill_id);
+          const base = baseId != null ? byId.get(baseId) : null;
+          if (base && base.sp != null) {
+            evolutionBase = base;
+            const baseHint = effectiveHint(base.skill_id);
+            const baseSp = applyHintDiscount(base.sp, baseHint);
+            let basePrereqSp = 0;
+            for (const lower of CHAINS.get(base.skill_id) || []) {
+              if (lower.sp != null) {
+                basePrereqSp += applyHintDiscount(lower.sp, effectiveHint(lower.skill_id)) || 0;
+              }
+            }
+            sp = baseSp;
+            prereqSp = basePrereqSp;
+            totalSp = baseSp == null ? null : baseSp + basePrereqSp;
+            evolutionBaseTotalSp = base.total_sp == null ? null : base.total_sp;
+            prereqEval = base._eval;
+          }
+        }
+
         s._hint = hint;
         s._sp = sp;
         s._total_sp = totalSp;
-        s._prereq_sp = s.sp == null ? 0 : prereqSp;
+        s._prereq_sp = s.sp == null && !evolutionBase ? 0 : prereqSp;
         s._prereq_eval = prereqEval;
         s._upgrade_point = s._eval - prereqEval;
         s._efficiency = sp != null && sp > 0 ? s._upgrade_point / sp : null;
         s._total_efficiency = totalSp != null && totalSp > 0 ? s._eval / totalSp : null;
+        s._evolution_base = evolutionBase ? evolutionBase.skill_id : null;
+        s._evolution_base_name = evolutionBase ? evolutionBase.name : '';
+        s._evolution_base_total_sp = evolutionBaseTotalSp;
+        s._evolution_base_prereq_sp = evolutionBase ? evolutionBase.prereq_sp : null;
       }
 
       invalidateOptimization();
@@ -1763,39 +1768,42 @@
     }
 
     function evolutionOptionsForBase(baseSkillId) {
-      const ids = GOLD_SKILL_EVOLUTIONS[String(baseSkillId)] || [];
-      return ids.map((id) => byId.get(id)).filter(Boolean);
+      if (state.cardId == null) return [];
+      const entries = CARD_GOLD_SKILL_EVOLUTIONS[String(state.cardId)] || [];
+      return entries
+        .filter((e) => e.base_skill_id === baseSkillId)
+        .map((e) => byId.get(e.skill_id))
+        .filter(Boolean);
     }
 
     function selectEvolutionOption(baseSkillId, selectSkillId) {
       const options = evolutionOptionsForBase(baseSkillId).map((s) => s.skill_id);
       const all = [baseSkillId, ...options];
-      if (state.selected.has(selectSkillId)) {
-        state.selected.delete(selectSkillId);
-      } else {
-        for (const id of all) state.selected.delete(id);
-        state.selected.add(selectSkillId);
-      }
+      for (const id of all) state.selected.delete(id);
+      if (selectSkillId != null) state.selected.add(selectSkillId);
       saveSelection();
       renderCardEvolution();
       render();
     }
 
-    function evoOptionHtml(skill, baseSkillId, isBase) {
-      if (!skill) return '';
-      const selected = state.selected.has(skill.skill_id);
-      const evalPoint = formatNumber(skill._eval);
-      const sp = skill.sp != null ? `SP ${formatNumber(skill._sp)}` : 'SP —';
-      const attrs = isBase
-        ? `data-evo-base="${baseSkillId}"`
-        : `data-evo-base="${baseSkillId}" data-evo-select="${skill.skill_id}"`;
-      const label = isBase ? '通常' : '進化';
-      return `<button type="button" class="evo-option${selected ? ' active' : ''}" ${attrs} ` +
-        `title="${escapeHtml(skill.name)}（${label}）">` +
-        `<span class="evo-option-label">${label}</span>` +
-        `<span class="evo-option-name">${escapeHtml(skill.name)}</span>` +
-        `<span class="evo-option-meta">評価 ${evalPoint} / ${sp}</span>` +
-        `</button>`;
+    function evolutionSelectHtml(base, evolutions) {
+      const current = state.selected.has(base.skill_id)
+        ? base.skill_id
+        : (evolutions.find((s) => state.selected.has(s.skill_id))?.skill_id || '');
+      const baseSp = base.sp != null ? `SP ${formatNumber(base._sp)}` : 'SP —';
+      const options = [
+        `<option value=""${current === '' ? ' selected' : ''}>未選択</option>`,
+        `<option value="${base.skill_id}"${current === base.skill_id ? ' selected' : ''}>` +
+          `通常: ${escapeHtml(base.name)}（評価 ${formatNumber(base._eval)} / ${baseSp}）</option>`,
+      ];
+      for (const evo of evolutions) {
+        options.push(
+          `<option value="${evo.skill_id}"${current === evo.skill_id ? ' selected' : ''}>` +
+          `進化: ${escapeHtml(evo.name)}（評価 ${formatNumber(evo._eval)} / ${baseSp}）</option>`
+        );
+      }
+      return `<select class="evo-select" data-evo-base="${base.skill_id}" ` +
+        `aria-label="${escapeHtml(base.name)} の進化先">${options.join('')}</select>`;
     }
 
     function renderCardEvolution() {
@@ -1816,17 +1824,13 @@
       const groups = [];
       for (const base of initialGold) {
         const evolutions = evolutionOptionsForBase(base.skill_id);
-        const options = [evoOptionHtml(base, base.skill_id, true)];
-        for (const evo of evolutions) {
-          options.push(evoOptionHtml(evo, base.skill_id, false));
-        }
         const note = evolutions.length
           ? `${formatNumber(evolutions.length)}件の進化`
           : '進化なし';
         groups.push(
           `<div class="evo-group">` +
             `<div class="evo-group-title">${escapeHtml(base.name)}<span class="evo-meta">${note}</span></div>` +
-            `<div class="evo-options">${options.join('')}</div>` +
+            evolutionSelectHtml(base, evolutions) +
           `</div>`
         );
       }
@@ -1838,7 +1842,7 @@
       }
 
       box.innerHTML =
-        `<div class="evo-section-title">初期金スキルの進化（通常 / 進化を切り替え）</div>` +
+        `<div class="evo-section-title">初期金スキルの進化先（ドロップダウンで選択）</div>` +
         `<div class="evo-groups">${groups.join('')}</div>`;
       box.classList.add('show');
     }
@@ -3822,6 +3826,7 @@
         if (s._total_sp != null) spTotal += Number(s._total_sp) || 0;
         else evalNoSp += Number(s._eval) || 0;
         if (s.total_sp != null) spBaseTotal += Number(s.total_sp) || 0;
+        else if (s._evolution_base_total_sp != null) spBaseTotal += Number(s._evolution_base_total_sp) || 0;
       }
       const overridden = selected.filter((s) => !countedSet.has(s.skill_id));
       return {
@@ -3893,6 +3898,9 @@
     }
 
     function hintSelectHtml(s) {
+      if (s._evolution_base != null) {
+        return '<span class="na" title="進化元の金スキルのヒントLvを使用します">—</span>';
+      }
       const hint = s._hint || 0;
       const options = [0, 1, 2, 3, 4, 5].map((lv) =>
         `<option value="${lv}"${hint === lv ? ' selected' : ''}>Lv${lv}</option>`
@@ -3930,19 +3938,23 @@
         `${open ? '詳細を閉じる' : '詳細'}</button>`
       );
 
-      const spDiscounted = s.sp != null && s._sp !== s.sp;
-      const sp = s.sp == null
+      const isEvolution = s._evolution_base != null;
+      const spDiscounted = !isEvolution && s.sp != null && s._sp !== s.sp;
+      const sp = s._sp == null
         ? '<span class="na">—</span>'
         : (spDiscounted
             ? `${formatNumber(s._sp)}<span class="sp-base">${formatNumber(s.sp)}</span>`
-            : formatNumber(s.sp));
-      const spTitle = s.sp == null
-        ? 'SP対象外'
-        : (spDiscounted
-            ? `ヒントLv${s._hint}${state.fastLearner ? '＋切れ者' : ''}` +
-              `（−${Math.round(spDiscountRate(s._hint) * 100)}%）: ` +
-              `${formatNumber(s.sp)} → ${formatNumber(s._sp)} SP`
-            : `${formatNumber(s.sp)} SP`);
+            : formatNumber(s._sp));
+      const spTitle = isEvolution
+        ? `進化元 ${s._evolution_base_name} のSP ${formatNumber(s._sp)}` +
+          `（ヒントLv${s._hint}${state.fastLearner ? '＋切れ者' : ''}）`
+        : (s.sp == null
+            ? 'SP対象外'
+            : (spDiscounted
+                ? `ヒントLv${s._hint}${state.fastLearner ? '＋切れ者' : ''}` +
+                  `（−${Math.round(spDiscountRate(s._hint) * 100)}%）: ` +
+                  `${formatNumber(s.sp)} → ${formatNumber(s._sp)} SP`
+                : `${formatNumber(s.sp)} SP`));
       const evalShowsBase = s.type !== '固有' && s.type !== '継承固有' && s._apt_factor !== 1;
       const evalTitle = s.type === '固有'
         ? `固有Lv${state.uniqueLevel} × ${UNIQUE_POINT_PER_LEVEL} = ${formatNumber(s._eval)}`
@@ -3960,13 +3972,15 @@
         ? '<span class="na">—</span>'
         : formatNumber(s._total_sp);
       const totalEffort = s._total_efficiency == null ? '<span class="na">—</span>' : s._total_efficiency.toFixed(2);
-      const totalDiscounted = s.total_sp != null && s._total_sp !== s.total_sp;
-      const totalSpTitle = s.total_sp == null
-        ? 'SP対象外'
-        : (s._prereq_sp > 0
-            ? `下位込み（内訳: 下位 ${formatNumber(s._prereq_sp)} + このスキル ${formatNumber(s._sp || 0)}）` +
-              (totalDiscounted ? ` / 割引前 ${formatNumber(s.total_sp)}` : '')
-            : `${formatNumber(s._total_sp)}` + (totalDiscounted ? ` / 割引前 ${formatNumber(s.total_sp)}` : ''));
+      const totalDiscounted = !isEvolution && s.total_sp != null && s._total_sp !== s.total_sp;
+      const totalSpTitle = isEvolution
+        ? `進化元 ${s._evolution_base_name} の下位込みSP ${formatNumber(s._total_sp)}`
+        : (s.total_sp == null
+            ? 'SP対象外'
+            : (s._prereq_sp > 0
+                ? `下位込み（内訳: 下位 ${formatNumber(s._prereq_sp)} + このスキル ${formatNumber(s._sp || 0)}）` +
+                  (totalDiscounted ? ` / 割引前 ${formatNumber(s.total_sp)}` : '')
+                : `${formatNumber(s._total_sp)}` + (totalDiscounted ? ` / 割引前 ${formatNumber(s.total_sp)}` : '')));
       const desc = s._descOneLine ? escapeHtml(s._descOneLine) : '<span class="na">説明なし</span>';
       const descShort = s._descOneLine
         ? (s._descOneLine.length > 56 ? escapeHtml(s._descOneLine.slice(0, 56)) + '…' : escapeHtml(s._descOneLine))
@@ -3996,10 +4010,15 @@
           : '<span class="na">説明なし</span>';
         const discountedSp = s._sp == null ? '' : formatNumber(s._sp);
         const discountedTotal = s._total_sp == null ? '' : formatNumber(s._total_sp);
-        const spDiscounted = s.sp != null && s._sp !== s.sp;
-        const hintNote = spDiscounted
-          ? `（元 ${formatNumber(s.sp)} / −${Math.round(spDiscountRate(s._hint) * 100)}%` +
-            `${state.fastLearner ? '・切れ者込み' : ''}）`
+        const spDiscounted = !isEvolution && s.sp != null && s._sp !== s.sp;
+        const hintNote = isEvolution
+          ? `（進化元 ${escapeHtml(s._evolution_base_name)} のSP）`
+          : (spDiscounted
+              ? `（元 ${formatNumber(s.sp)} / −${Math.round(spDiscountRate(s._hint) * 100)}%` +
+                `${state.fastLearner ? '・切れ者込み' : ''}）`
+              : '');
+        const evolutionNote = isEvolution
+          ? `<span>進化元 <b>${escapeHtml(s._evolution_base_name)}</b></span>`
           : '';
         const uniqueNote = s.type === '固有'
           ? `<span>固有Lv <b>${state.uniqueLevel}</b>（${state.uniqueLevel} × ${UNIQUE_POINT_PER_LEVEL}）</span>`
@@ -4018,13 +4037,14 @@
               `<span>グループ <b>${s.group_id}</b>（rate ${s.group_rate}）</span>` +
               `<span>カテゴリ <b>${escapeHtml(s.category_label)}</b></span>` +
               uniqueNote +
+              evolutionNote +
               aptNote +
               `<span>ヒントLv <b>${s._hint}</b>${s._hint > 0 ? `（−${discountPct(s._hint)}%）` : '（割引なし）'}</span>` +
               `<span>評価点 <b>${formatNumber(s._eval)}</b>${s._eval !== s.eval_point ? `（基礎 ${formatNumber(s.eval_point)}）` : ''}</span>` +
               `<span>割引後SP <b>${discountedSp || '—'}</b>${hintNote}</span>` +
               `<span>下位込み割引後SP <b>${discountedTotal || '—'}</b></span>` +
-              `<span>下位評価点 <b>${formatNumber(s._prereq_eval)}</b></span>` +
-              `<span>下位SP（割引前） <b>${formatNumber(s.prereq_sp)}</b></span>` +
+              `<span>${isEvolution ? '進化元の評価点' : '下位評価点'} <b>${formatNumber(s._prereq_eval)}</b></span>` +
+              `<span>${isEvolution ? '進化元の下位SP（割引前）' : '下位SP（割引前）'} <b>${formatNumber(isEvolution ? s._evolution_base_prereq_sp : s.prereq_sp)}</b></span>` +
               `<span>上昇評価点 <b>${formatNumber(s._upgrade_point)}</b></span>` +
             `</div>` +
           `</td></tr>`
@@ -4313,15 +4333,13 @@
         render();
       });
 
-      $('cardEvolution').addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-evo-base]');
-        if (!btn) return;
-        const baseId = Number(btn.dataset.evoBase);
-        const selectId = btn.hasAttribute('data-evo-select')
-          ? Number(btn.dataset.evoSelect)
-          : baseId;
-        if (!byId.has(baseId) || !byId.has(selectId)) return;
-        selectEvolutionOption(baseId, selectId);
+      $('cardEvolution').addEventListener('change', (e) => {
+        const sel = e.target.closest('select[data-evo-base]');
+        if (!sel) return;
+        const baseId = Number(sel.dataset.evoBase);
+        const value = Number(sel.value);
+        if (!byId.has(baseId)) return;
+        selectEvolutionOption(baseId, value || null);
       });
 
       $('aptFilter').addEventListener('click', (e) => {

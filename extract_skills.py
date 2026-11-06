@@ -361,22 +361,34 @@ def load_card_initial_skills(con: sqlite3.Connection) -> dict[int, list[int]]:
     return dict(out)
 
 
-def load_gold_skill_evolutions(con: sqlite3.Connection) -> dict[int, list[int]]:
-    """金スキル → 進化スキルの対応（シナリオ非依存）。
+def load_card_gold_skill_evolutions(con: sqlite3.Connection) -> dict[int, list[dict]]:
+    """カードの金スキル → カード固有の進化スキル（skill_upgrade_description）。
 
-    skill_upgrade_speciality はシナリオ別に同じ進化スキルを持つことがあるため、
-    base_skill_id ごとに進化スキルIDを重複なくまとめる。
+    skill_upgrade_description.rank は available_skill_set.need_rank に対応する。
+    例: スペシャルウィーク rank 3 → 食いしん坊 → はらぺこ大将
     """
-    out: dict[int, list[int]] = defaultdict(list)
+    out: dict[int, list[dict]] = defaultdict(list)
     for r in con.execute("""
-        SELECT base_skill_id, skill_id
-        FROM skill_upgrade_speciality
-        ORDER BY base_skill_id, skill_id
+        SELECT
+            ud.card_id,
+            ud.rank,
+            ud.skill_id AS evolution_skill_id,
+            a.skill_id AS base_skill_id
+        FROM skill_upgrade_description AS ud
+        JOIN card_data AS c ON c.id = ud.card_id
+        JOIN available_skill_set AS a
+            ON a.available_skill_set_id = c.available_skill_set_id
+            AND a.need_rank = ud.rank
+        JOIN skill_data AS s ON s.id = a.skill_id AND s.rarity = 2
+        ORDER BY ud.card_id, ud.rank, ud.skill_id
     """):
-        base_skill_id = int(r["base_skill_id"])
-        skill_id = int(r["skill_id"])
-        if skill_id not in out[base_skill_id]:
-            out[base_skill_id].append(skill_id)
+        out[int(r["card_id"])].append(
+            {
+                "base_skill_id": int(r["base_skill_id"]),
+                "skill_id": int(r["evolution_skill_id"]),
+                "rank": int(r["rank"]),
+            }
+        )
     return dict(out)
 
 
@@ -494,7 +506,7 @@ def write_js(
     meta: dict,
     cards: list[dict],
     card_initial_skills: dict[int, list[int]],
-    gold_skill_evolutions: dict[int, list[int]],
+    card_gold_skill_evolutions: dict[int, list[dict]],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     # index.html から <script src="data/skills.js"> で読み込む
@@ -506,7 +518,7 @@ def write_js(
                 "skills": rows,
                 "cards": cards,
                 "cardInitialSkills": card_initial_skills,
-                "goldSkillEvolutions": gold_skill_evolutions,
+                "cardGoldSkillEvolutions": card_gold_skill_evolutions,
             },
             f,
             ensure_ascii=False,
@@ -588,7 +600,7 @@ def main() -> int:
     raw = load_rows(con)
     cards = load_cards(con)
     card_initial_skills = load_card_initial_skills(con)
-    gold_skill_evolutions = load_gold_skill_evolutions(con)
+    card_gold_skill_evolutions = load_card_gold_skill_evolutions(con)
     con.close()
 
     if not raw:
@@ -620,7 +632,7 @@ def main() -> int:
         meta,
         cards,
         card_initial_skills,
-        gold_skill_evolutions,
+        card_gold_skill_evolutions,
     )
     update_index_cache_version(Path(args.js).resolve().parent.parent / "index.html", str(now))
     font_path = Path(args.js).resolve().parent.parent / "assets" / "umamusume-font.ttf"
