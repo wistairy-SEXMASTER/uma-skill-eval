@@ -132,27 +132,6 @@
   .toggle input { margin: 0; accent-color: var(--accent); }
   .toggle.on { color: var(--text); }
 
-  .hint-box {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 6px 3px 10px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: #fff;
-    white-space: nowrap;
-  }
-  .hint-box .label { color: var(--muted); font-size: 12px; }
-  .hint-box select {
-    padding: 4px 6px;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    background: #f3f4f6;
-    font-size: 12px;
-  }
-  .hint-box.active { border-color: #bfdbfe; background: var(--accent-soft); }
-  .hint-box.active .label { color: #1d4ed8; font-weight: 600; }
-  .hint-box.active select { background: #fff; border-color: #dbeafe; }
   .badge.hint { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
   .sp-base {
     display: block;
@@ -163,11 +142,19 @@
     text-decoration: line-through;
   }
   .hint-select {
-    padding: 2px 5px;
-    border: 1px solid #cbd5e1;
+    padding: 2px 3px;
+    border: 1px solid #e5e7eb;
     border-radius: 5px;
     background: #fff;
-    font-size: 11px;
+    font-size: 11.5px;
+    line-height: 1.3;
+  }
+  .hint-select:hover { border-color: #cbd5e1; }
+  .hint-select.on {
+    border-color: #bfdbfe;
+    background: var(--accent-soft);
+    color: #1d4ed8;
+    font-weight: 600;
   }
   .btn {
     padding: 8px 12px;
@@ -288,8 +275,9 @@
   tbody tr:last-child td { border-bottom: none; }
 
   .col-check { width: 38px; text-align: center; }
-  .col-name { width: 29%; }
+  .col-name { width: 25%; }
   .col-eval { width: 70px; }
+  .col-hint { width: 66px; text-align: center; }
   .col-sp { width: 60px; }
   .col-upgrade { width: 82px; }
   .col-eff { width: 76px; }
@@ -539,15 +527,15 @@
 
   @media (max-width: 1180px) {
     .col-desc, td.col-desc { display: none; }
-    .col-name { width: 34%; }
+    .col-name { width: 30%; }
   }
   @media (max-width: 980px) {
     .col-upgrade, td.col-upgrade { display: none; }
-    .col-name { width: 38%; }
+    .col-name { width: 34%; }
   }
   @media (max-width: 820px) {
     .col-totalsp, td.col-totalsp { display: none; }
-    .col-name { width: 44%; }
+    .col-name { width: 40%; }
   }
   @media (max-width: 760px) {
     body { padding-bottom: 146px; font-size: 13px; }
@@ -562,6 +550,7 @@
     .col-check { width: 32px; }
     td.col-check { padding-left: 6px; padding-right: 2px; }
     .col-eval { width: 54px; }
+    .col-hint { width: 58px; }
     .col-sp { width: 46px; }
     .col-eff, td.col-eff { display: none; }
     .col-toteff { width: 62px; }
@@ -576,6 +565,8 @@
   }
   @media (max-width: 520px) {
     .col-sp, td.col-sp { display: none; }
+    .col-hint { width: 54px; }
+    .hint-select { font-size: 11px; padding: 2px 1px; }
     .cart-stats { gap: 9px 12px; }
     .stat .value { font-size: 15px; }
     .stat.hide-sm { display: none; }
@@ -622,17 +613,6 @@
           <label class="toggle" id="onlyPurchasable-wrap"><input type="checkbox" id="onlyPurchasable"> SP取得可のみ</label>
           <label class="toggle" id="includeNegative-wrap"><input type="checkbox" id="includeNegative"> マイナス系を含む</label>
           <label class="toggle" id="onlySelected-wrap"><input type="checkbox" id="onlySelected"> 選択中のみ</label>
-          <label class="hint-box" id="hintBox" title="全スキル共通のヒントLv。スキル個別の設定は「詳細」から変更できます。">
-            <span class="label">ヒントLv</span>
-            <select id="hintLevel">
-              <option value="0">Lv0（なし）</option>
-              <option value="1">Lv1 −10%</option>
-              <option value="2">Lv2 −20%</option>
-              <option value="3">Lv3 −30%</option>
-              <option value="4">Lv4 −35%</option>
-              <option value="5">Lv5 −40%</option>
-            </select>
-          </label>
         </div>
         <div class="chips" id="typeChips"></div>
       </div>
@@ -649,6 +629,7 @@
         <col class="col-check">
         <col class="col-name">
         <col class="col-eval">
+        <col class="col-hint">
         <col class="col-sp">
         <col class="col-upgrade">
         <col class="col-eff">
@@ -661,6 +642,7 @@
           <th class="col-check"><input type="checkbox" id="pageSelect" title="このページを全選択 / 解除"></th>
           <th class="sortable" data-sort="name">スキル<span class="arrow" id="arrow-name"></span></th>
           <th class="sortable num" data-sort="eval_point" title="skill_data.grade_value">評価点<span class="arrow" id="arrow-eval_point"></span></th>
+          <th class="col-hint" title="スキルごとのヒントLv（SP割引）">ヒントLv</th>
           <th class="sortable num" data-sort="sp" title="single_mode_skill_need_point.need_skill_point">SP<span class="arrow" id="arrow-sp"></span></th>
           <th class="sortable num col-upgrade" data-sort="upgrade_point" title="下位スキルからの上昇評価点">上昇評価点<span class="arrow" id="arrow-upgrade_point"></span></th>
           <th class="sortable num col-eff" data-sort="efficiency" title="上昇評価点 ÷ SP">上昇効率<span class="arrow" id="arrow-efficiency"></span></th>
@@ -690,9 +672,9 @@
           <li>同じグループのスキルを複数選択した場合、<b>最も上位（<code>group_rate</code> が最大）の1つだけ</b>を合計に加算します。下位スキルは「集計外」と表示されます。</li>
           <li><b>固有</b>・<b>進化</b>はSPでは取得できませんが、評価点は合計に加算されます（合計SPには含まれません）。</li>
           <li><b>マイナス系</b>（<code>group_rate = -1</code> または評価点が負）は初期状態では非表示です。必要に応じて「マイナス系を含む」をオンにしてください。</li>
-          <li><b>ヒントLv</b>は画面上部で全スキル共通のLvを選べます。スキルごとに変えたい場合は、各行の「詳細」を開いて個別に設定してください（個別設定が共通設定より優先されます）。</li>
+          <li><b>ヒントLv</b>はスキルごとに、一覧の「ヒントLv」列で変更できます。初期値は全スキルLv0（割引なし）です。</li>
           <li>ヒントLvによるSP減少率は <b>Lv1 −10% / Lv2 −20% / Lv3 −30% / Lv4 −35% / Lv5 −40%</b> です。割引後のSPはスキルごとに<b>小数点以下切り捨て</b>で計算します（例: 170SPのLv4 → 110SP）。</li>
-          <li>上位スキルの「下位込みSP」は、下位スキルそれぞれのヒントLvで割引したSPを合計します。下位スキルに個別設定がなければ共通のヒントLvが適用されます。</li>
+          <li>上位スキルの「下位込みSP」は、下位スキルそれぞれに設定したヒントLvで割引したSPを合計します。下位スキルのヒントLvを変えると、上位スキルの下位込みSPにも反映されます。</li>
           <li>スキル適性による評価点倍率、固有スキルのレベル補正、切れ者補正は<b>未適用</b>です。ゲーム内の実際の査定値とは異なります。</li>
           <li>特殊スキル（ストーリー・イベント用）と期限切れスキルは収録していません。データは <code>extract_skills.py</code> で再生成できます。</li>
         </ul>
@@ -799,8 +781,7 @@
       pageSize: 100,
       selected: new Set(),
       expanded: new Set(),
-      hintLevel: 0,
-      hintOverrides: new Map(),
+      hintLevels: new Map(),
     };
 
     function escapeHtml(value) {
@@ -849,19 +830,20 @@
       } catch (err) { /* ignore */ }
     }
 
-    // ヒントLv設定を復元
+    // ヒントLv設定を復元（旧形式の default は使わず、個別設定のみ引き継ぐ）
     try {
       const raw = localStorage.getItem(HINT_KEY);
       if (raw) {
         const saved = JSON.parse(raw);
-        const def = Number(saved.default);
-        if (Number.isInteger(def) && def >= 0 && def <= 5) state.hintLevel = def;
-        if (saved.overrides && typeof saved.overrides === 'object') {
-          for (const [id, lv] of Object.entries(saved.overrides)) {
+        const map = saved && saved.overrides && typeof saved.overrides === 'object'
+          ? saved.overrides
+          : saved;
+        if (map && typeof map === 'object') {
+          for (const [id, lv] of Object.entries(map)) {
             const skillId = Number(id);
             const level = Number(lv);
-            if (byId.has(skillId) && Number.isInteger(level) && level >= 0 && level <= 5) {
-              state.hintOverrides.set(skillId, level);
+            if (byId.has(skillId) && Number.isInteger(level) && level > 0 && level <= 5) {
+              state.hintLevels.set(skillId, level);
             }
           }
         }
@@ -871,8 +853,7 @@
     function saveHint() {
       try {
         localStorage.setItem(HINT_KEY, JSON.stringify({
-          default: state.hintLevel,
-          overrides: Object.fromEntries(state.hintOverrides),
+          overrides: Object.fromEntries(state.hintLevels),
         }));
       } catch (err) { /* ignore */ }
     }
@@ -882,9 +863,7 @@
     }
 
     function effectiveHint(skillId) {
-      return state.hintOverrides.has(skillId)
-        ? state.hintOverrides.get(skillId)
-        : state.hintLevel;
+      return state.hintLevels.get(skillId) || 0;
     }
 
     // ゲーム内と同じく、割引後のSPは小数点以下切り捨て
@@ -911,12 +890,6 @@
         s._efficiency = sp != null && sp > 0 ? s.upgrade_point / sp : null;
         s._total_efficiency = totalSp != null && totalSp > 0 ? s.eval_point / totalSp : null;
       }
-    }
-
-    function updateHintBox() {
-      const box = $('hintBox');
-      if (!box) return;
-      box.classList.toggle('active', state.hintLevel > 0);
     }
 
     function initMeta() {
@@ -1074,13 +1047,10 @@
         eff.classList.remove('na');
       }
       const note = $('cartNote');
-      const overrideCount = state.hintOverrides.size;
-      const hintBits = [];
-      if (state.hintLevel > 0) {
-        hintBits.push(`共通ヒントLv${state.hintLevel}（−${discountPct(state.hintLevel)}%）`);
-      }
-      if (overrideCount) hintBits.push(`個別設定 ${formatNumber(overrideCount)} 件`);
-      const hintText = hintBits.length ? `${hintBits.join(' / ')}適用中。` : '';
+      const hintCount = sum.counted.filter((s) => s._hint > 0).length;
+      const hintText = hintCount
+        ? `選択中 ${formatNumber(hintCount)} 件にヒントLv設定を適用中。`
+        : '';
       const savedText = hintText && sum.spBaseTotal > sum.spTotal
         ? ` 割引前 ${formatNumber(sum.spBaseTotal)} SP → ${formatNumber(sum.spTotal)} SP。`
         : '';
@@ -1113,6 +1083,18 @@
       return '';
     }
 
+    function hintSelectHtml(s) {
+      const hint = s._hint || 0;
+      const options = [0, 1, 2, 3, 4, 5].map((lv) =>
+        `<option value="${lv}"${hint === lv ? ' selected' : ''}>Lv${lv}</option>`
+      ).join('');
+      const title = hint > 0
+        ? `ヒントLv${hint}（−${discountPct(hint)}%）`
+        : 'ヒントLv0（割引なし）';
+      return `<select class="hint-select${hint > 0 ? ' on' : ''}" data-hint-id="${s.skill_id}" ` +
+        `title="${title}" aria-label="${escapeHtml(s.name)} のヒントLv">${options}</select>`;
+    }
+
     function rowHtml(s, overriddenIds) {
       const id = s.skill_id;
       const checked = state.selected.has(id);
@@ -1126,9 +1108,6 @@
       }
       if (s.total_sp == null) {
         badges.push('<span class="badge nosp">SP対象外</span>');
-      }
-      if (state.hintOverrides.has(id)) {
-        badges.push(`<span class="badge hint">ヒントLv${s._hint}・個別</span>`);
       }
       if (overridden) {
         badges.push('<span class="badge overridden">集計外</span>');
@@ -1174,6 +1153,7 @@
             `<div class="skill-sub">${badges.join('')}</div>` +
           `</td>` +
           `<td class="num col-eval${s.eval_point < 0 ? ' neg' : ''}">${formatNumber(s.eval_point)}</td>` +
+          `<td class="col-hint">${hintSelectHtml(s)}</td>` +
           `<td class="num col-sp" title="${escapeHtml(spTitle)}">${sp}</td>` +
           `<td class="num col-upgrade">${upgrade}</td>` +
           `<td class="num col-eff ${effClass(s._efficiency)}">${effort}</td>` +
@@ -1186,27 +1166,19 @@
         const fullDesc = s.description
           ? escapeHtml(s.description).replace(/\n/g, '<br>')
           : '<span class="na">説明なし</span>';
-        const ownHint = state.hintOverrides.has(id);
-        const hintOptions = [
-          `<option value=""${ownHint ? '' : ' selected'}>共通設定（Lv${state.hintLevel}）</option>`,
-          ...[0, 1, 2, 3, 4, 5].map((lv) => {
-            const label = lv === 0 ? 'Lv0（なし）' : `Lv${lv}（−${discountPct(lv)}%）`;
-            return `<option value="${lv}"${ownHint && s._hint === lv ? ' selected' : ''}>${label}</option>`;
-          }),
-        ].join('');
         const discountedSp = s._sp == null ? '' : formatNumber(s._sp);
         const discountedTotal = s._total_sp == null ? '' : formatNumber(s._total_sp);
         const hintNote = s.sp != null && s._hint > 0
           ? `（元 ${formatNumber(s.sp)} / −${discountPct(s._hint)}%）`
           : '';
         rows.push(
-          `<tr class="detail-row"><td colspan="9">` +
+          `<tr class="detail-row"><td colspan="10">` +
             `<div class="detail-desc">${fullDesc}</div>` +
             `<div class="detail-meta">` +
               `<span>ID <b>${s.skill_id}</b></span>` +
               `<span>グループ <b>${s.group_id}</b>（rate ${s.group_rate}）</span>` +
               `<span>カテゴリ <b>${escapeHtml(s.category_label)}</b></span>` +
-              `<span>ヒントLv <select class="hint-select" data-hint-id="${id}" aria-label="${escapeHtml(s.name)} のヒントLv">${hintOptions}</select></span>` +
+              `<span>ヒントLv <b>${s._hint}</b>${s._hint > 0 ? `（−${discountPct(s._hint)}%）` : '（割引なし）'}</span>` +
               `<span>割引後SP <b>${discountedSp || '—'}</b>${hintNote}</span>` +
               `<span>下位込み割引後SP <b>${discountedTotal || '—'}</b></span>` +
               `<span>下位評価点 <b>${formatNumber(s.prereq_eval)}</b></span>` +
@@ -1397,14 +1369,6 @@
         render();
       });
 
-      $('hintLevel').addEventListener('change', (e) => {
-        state.hintLevel = Number(e.target.value) || 0;
-        saveHint();
-        recomputeDerived();
-        updateHintBox();
-        render();
-      });
-
       $('onlyPurchasable').addEventListener('change', (e) => {
         state.onlyPurchasable = e.target.checked;
         e.target.closest('.toggle').classList.toggle('on', e.target.checked);
@@ -1463,8 +1427,9 @@
         const hintSel = e.target.closest('select[data-hint-id]');
         if (hintSel) {
           const id = Number(hintSel.dataset.hintId);
-          if (hintSel.value === '') state.hintOverrides.delete(id);
-          else state.hintOverrides.set(id, Number(hintSel.value));
+          const level = Number(hintSel.value) || 0;
+          if (level > 0) state.hintLevels.set(id, level);
+          else state.hintLevels.delete(id);
           saveHint();
           recomputeDerived();
           render();
@@ -1519,8 +1484,6 @@
       initMeta();
       initCategory();
       renderTypeChips();
-      $('hintLevel').value = String(state.hintLevel);
-      updateHintBox();
       recomputeDerived();
       bind();
       updateStickyOffset();
