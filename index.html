@@ -1190,7 +1190,7 @@
           <li><b>上昇評価点</b>は「このスキルの評価点 − 直下の下位スキルの評価点」、<b>上昇効率</b>は「上昇評価点 ÷ このスキルのSP」です。すでに下位スキルを取得している場合の効率です。</li>
           <li><b>下位込みSP</b>は、上位スキル取得に必要な下位スキル（同じ <code>group_id</code> の下位 <code>group_rate</code>）のSPを合計した値です。<b>総合効率</b>は「評価点 ÷ 下位込みSP」です。</li>
           <li>同じグループのスキルを複数選択した場合、<b>最も上位（<code>group_rate</code> が最大）の1つだけ</b>を合計に加算します。下位スキルは「集計外」と表示されます。</li>
-          <li><b>上位スキルを選択すると、同じグループの下位スキルも自動的に選択されます。</b>例: 「決意の直滑降」を選ぶと「直滑降」も選択されます。下位スキルは「集計外」と表示され、合計には上位スキルのみが加算されます。</li>
+          <li><b>上位スキルを選択すると、同じグループの下位スキルも自動的に選択されます。</b>例: 「決意の直滑降」を選ぶと「直滑降」も選択されます。下位スキルは「集計外」と表示され、合計には上位スキルのみが加算されます。<b>進化スキルを選択した場合も、進化元の金スキルの下位スキルが自動的に選択されます。</b></li>
           <li><b>固有</b>・<b>進化</b>はSPでは取得できませんが、評価点は合計に加算されます（合計SPには含まれません）。</li>
           <li><b>マイナス系</b>（<code>group_rate = -1</code> または評価点が負）は初期状態では非表示です。必要に応じて「マイナス系を含む」をオンにしてください。</li>
           <li><b>ヒントLv</b>はスキルごとに、一覧の「ヒントLv」列で変更できます。初期値は全スキルLv0（割引なし）です。「<b>ヒントLvリセット</b>」で全スキルのヒントLvを0に戻せます。</li>
@@ -1874,7 +1874,13 @@
     function selectEvolutionOption(baseSkillId, selectSkillId) {
       const all = [baseSkillId, ...(ALL_EVOLUTIONS_BY_BASE.get(baseSkillId) || [])];
       for (const id of all) state.selected.delete(id);
-      if (selectSkillId != null) state.selected.add(selectSkillId);
+      if (selectSkillId != null) {
+        state.selected.add(selectSkillId);
+        // 進化元の金スキルの下位スキルも自動選択
+        for (const lower of CHAINS.get(baseSkillId) || []) {
+          state.selected.add(lower.skill_id);
+        }
+      }
       saveSelection();
       renderCardEvolution();
       renderScenarioEvolution();
@@ -3943,8 +3949,18 @@
 
     function computeSummary() {
       const selected = [...state.selected].map((id) => byId.get(id)).filter(Boolean);
+      const evolvedGroupIds = new Set();
+      for (const s of selected) {
+        const baseId = EVOLUTION_BASE_MAP.get(s.skill_id);
+        if (baseId != null) {
+          const base = byId.get(baseId);
+          if (base) evolvedGroupIds.add(base.group_id);
+        }
+      }
       const groups = new Map();
       for (const s of selected) {
+        // 進化スキルを選択している場合、進化元の金スキルグループは集計しない
+        if (evolvedGroupIds.has(s.group_id)) continue;
         const cur = groups.get(s.group_id);
         if (!cur) {
           groups.set(s.group_id, s);
@@ -4012,9 +4028,9 @@
         note.innerHTML = 'スキルを選択すると、合計評価点・合計SP・総合効率を計算します。';
       } else if (sum.overridden.length) {
         note.innerHTML =
-          `<span class="warn">同一グループの下位 ${formatNumber(sum.overridden.length)} 件は集計外</span>` +
+          `<span class="warn">下位スキル ${formatNumber(sum.overridden.length)} 件は集計外</span>` +
           `（集計対象 ${formatNumber(sum.counted.length)} 件）。` +
-          `上位スキルを選択すると、下位スキルのSPを含めて計算されます。` +
+          `上位スキル・進化スキルを選択すると、下位スキルのSPを含めて計算されます。` +
           escapeHtml(settingText + aptText + savedText);
       } else {
         note.textContent =
