@@ -1190,6 +1190,7 @@
           <li><b>上昇評価点</b>は「このスキルの評価点 − 直下の下位スキルの評価点」、<b>上昇効率</b>は「上昇評価点 ÷ このスキルのSP」です。すでに下位スキルを取得している場合の効率です。</li>
           <li><b>下位込みSP</b>は、上位スキル取得に必要な下位スキル（同じ <code>group_id</code> の下位 <code>group_rate</code>）のSPを合計した値です。<b>総合効率</b>は「評価点 ÷ 下位込みSP」です。</li>
           <li>同じグループのスキルを複数選択した場合、<b>最も上位（<code>group_rate</code> が最大）の1つだけ</b>を合計に加算します。下位スキルは「集計外」と表示されます。</li>
+          <li><b>上位スキルを選択すると、同じグループの下位スキルも自動的に選択されます。</b>例: 「決意の直滑降」を選ぶと「直滑降」も選択されます。下位スキルは「集計外」と表示され、合計には上位スキルのみが加算されます。</li>
           <li><b>固有</b>・<b>進化</b>はSPでは取得できませんが、評価点は合計に加算されます（合計SPには含まれません）。</li>
           <li><b>マイナス系</b>（<code>group_rate = -1</code> または評価点が負）は初期状態では非表示です。必要に応じて「マイナス系を含む」をオンにしてください。</li>
           <li><b>ヒントLv</b>はスキルごとに、一覧の「ヒントLv」列で変更できます。初期値は全スキルLv0（割引なし）です。「<b>ヒントLvリセット</b>」で全スキルのヒントLvを0に戻せます。</li>
@@ -2320,10 +2321,9 @@
       const keep = [...state.selected]
         .map((id) => byId.get(id))
         .filter((s) => s && s.sp == null);
-      state.selected = new Set([
-        ...keep.map((s) => s.skill_id),
-        ...lastOptimization.chosen.map((s) => s.skill_id),
-      ]);
+      const next = new Set(keep.map((s) => s.skill_id));
+      for (const s of lastOptimization.chosen) addSkillWithChain(s.skill_id, next);
+      state.selected = next;
       saveSelection();
       render();
     }
@@ -2892,7 +2892,7 @@
       }
       saveHint();
       if ($('ocrSelectSkills')?.checked) {
-        for (const id of hintMap.keys()) state.selected.add(id);
+        for (const id of hintMap.keys()) addSkillWithChain(id);
         saveSelection();
       }
       recomputeDerived();
@@ -4243,9 +4243,16 @@
       renderArrows();
     }
 
+    function addSkillWithChain(id, target = state.selected) {
+      target.add(id);
+      for (const lower of CHAINS.get(id) || []) {
+        target.add(lower.skill_id);
+      }
+    }
+
     function toggleSkill(id) {
       if (state.selected.has(id)) state.selected.delete(id);
-      else state.selected.add(id);
+      else addSkillWithChain(id);
       saveSelection();
       render();
     }
@@ -4255,7 +4262,7 @@
       const start = (state.page - 1) * state.pageSize;
       const pageRows = filtered.slice(start, start + state.pageSize);
       for (const s of pageRows) {
-        if (select) state.selected.add(s.skill_id);
+        if (select) addSkillWithChain(s.skill_id);
         else state.selected.delete(s.skill_id);
       }
       saveSelection();
