@@ -343,26 +343,6 @@ def load_cards(con: sqlite3.Connection) -> list[dict]:
     return cards
 
 
-def load_scenarios(con: sqlite3.Connection) -> list[dict]:
-    """育成シナリオ一覧。名前は text_data category=119。"""
-    sql = """
-        SELECT sc.id, sc.sort_id, tn.text AS name
-        FROM single_mode_scenario AS sc
-        LEFT JOIN text_data AS tn ON tn.category = 119 AND tn."index" = sc.id
-        ORDER BY sc.sort_id, sc.id
-    """
-    out = []
-    for r in con.execute(sql):
-        out.append(
-            {
-                "id": int(r["id"]),
-                "sort_id": int(r["sort_id"] or 0),
-                "name": clean_text(r["name"]) or f"シナリオ {r['id']}",
-            }
-        )
-    return out
-
-
 def load_card_initial_skills(con: sqlite3.Connection) -> dict[int, list[int]]:
     """カードが最初から取得できるスキル（available_skill_set）。"""
     sql = """
@@ -381,20 +361,22 @@ def load_card_initial_skills(con: sqlite3.Connection) -> dict[int, list[int]]:
     return dict(out)
 
 
-def load_scenario_evolutions(con: sqlite3.Connection) -> dict[int, list[dict]]:
-    """シナリオごとの進化スキル（skill_upgrade_speciality）。"""
-    out: dict[int, list[dict]] = defaultdict(list)
+def load_gold_skill_evolutions(con: sqlite3.Connection) -> dict[int, list[int]]:
+    """金スキル → 進化スキルの対応（シナリオ非依存）。
+
+    skill_upgrade_speciality はシナリオ別に同じ進化スキルを持つことがあるため、
+    base_skill_id ごとに進化スキルIDを重複なくまとめる。
+    """
+    out: dict[int, list[int]] = defaultdict(list)
     for r in con.execute("""
-        SELECT scenario_id, base_skill_id, skill_id
+        SELECT base_skill_id, skill_id
         FROM skill_upgrade_speciality
-        ORDER BY scenario_id, id
+        ORDER BY base_skill_id, skill_id
     """):
-        out[int(r["scenario_id"])].append(
-            {
-                "base_skill_id": int(r["base_skill_id"]),
-                "skill_id": int(r["skill_id"]),
-            }
-        )
+        base_skill_id = int(r["base_skill_id"])
+        skill_id = int(r["skill_id"])
+        if skill_id not in out[base_skill_id]:
+            out[base_skill_id].append(skill_id)
     return dict(out)
 
 
@@ -511,9 +493,8 @@ def write_js(
     rows: list[dict],
     meta: dict,
     cards: list[dict],
-    scenarios: list[dict],
     card_initial_skills: dict[int, list[int]],
-    scenario_evolutions: dict[int, list[dict]],
+    gold_skill_evolutions: dict[int, list[int]],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     # index.html から <script src="data/skills.js"> で読み込む
@@ -524,9 +505,8 @@ def write_js(
                 "meta": meta,
                 "skills": rows,
                 "cards": cards,
-                "scenarios": scenarios,
                 "cardInitialSkills": card_initial_skills,
-                "scenarioEvolutions": scenario_evolutions,
+                "goldSkillEvolutions": gold_skill_evolutions,
             },
             f,
             ensure_ascii=False,
@@ -607,9 +587,8 @@ def main() -> int:
     con = connect(db_path)
     raw = load_rows(con)
     cards = load_cards(con)
-    scenarios = load_scenarios(con)
     card_initial_skills = load_card_initial_skills(con)
-    scenario_evolutions = load_scenario_evolutions(con)
+    gold_skill_evolutions = load_gold_skill_evolutions(con)
     con.close()
 
     if not raw:
@@ -624,7 +603,6 @@ def main() -> int:
         "generated_at": datetime.fromtimestamp(now).isoformat(timespec="seconds"),
         "total": len(rows),
         "cards": len(cards),
-        "scenarios": len(scenarios),
         "note": "eval_point=grade_value, sp=need_skill_point, upgrade_point=下位スキルからの上昇分, total_sp=下位込みSP",
     }
 
@@ -641,9 +619,8 @@ def main() -> int:
         [r for r in rows if r["available"] and r["type"] != "特殊"],
         meta,
         cards,
-        scenarios,
         card_initial_skills,
-        scenario_evolutions,
+        gold_skill_evolutions,
     )
     update_index_cache_version(Path(args.js).resolve().parent.parent / "index.html", str(now))
     font_path = Path(args.js).resolve().parent.parent / "assets" / "umamusume-font.ttf"

@@ -2,10 +2,9 @@
  "meta": {
   "db_path": "C:\\Program Files (x86)\\STEAM\\steamapps\\common\\UmamusumePrettyDerby_Jpn\\UmamusumePrettyDerby_Jpn_Data\\Persistent\\master\\master.mdb",
   "db_mtime": "2026-10-28T18:00:25",
-  "generated_at": "2026-11-07T02:39:40",
+  "generated_at": "2026-11-07T02:58:10",
   "total": 2223,
   "cards": 274,
-  "scenarios": 15,
   "note": "eval_point=grade_value, sp=need_skill_point, upgrade_point=下位スキルからの上昇分, total_sp=下位込みSP"
  },
  "skills": [
