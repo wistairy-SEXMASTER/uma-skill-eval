@@ -234,6 +234,23 @@
     font-size: 12px;
   }
   .card-evolution.show { display: block; }
+  .evolution-layout {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-top: 6px;
+  }
+  .evolution-layout > .card-evolution,
+  .evolution-layout > .scenario-evolution {
+    flex: 1 1 0;
+    min-width: 0;
+    margin-top: 0;
+  }
+  @media (max-width: 900px) {
+    .evolution-layout {
+      flex-direction: column;
+    }
+  }
   .evo-section-title {
     margin-bottom: 6px;
     font-weight: 600;
@@ -1019,17 +1036,19 @@
           <button class="btn tiny" id="btnCardAptReset" type="button" disabled>初期適性に戻す</button>
           <span class="card-info" id="cardInfo"></span>
         </div>
-        <div class="card-evolution" id="cardEvolution"></div>
-        <div class="scenario-evolution" id="scenarioEvolution">
-          <details>
-            <summary>シナリオ進化（シナリオごとに選択可能な進化スキル）</summary>
-            <div class="scenario-evolution-body">
-              <label class="opt-field">シナリオ
-                <select id="scenarioSelect" class="card-select"></select>
-              </label>
-              <div class="scenario-evolution-list" id="scenarioEvolutionList"></div>
-            </div>
-          </details>
+        <div class="evolution-layout">
+          <div class="card-evolution" id="cardEvolution"></div>
+          <div class="scenario-evolution" id="scenarioEvolution">
+            <details open>
+              <summary>シナリオ進化（シナリオごとに選択可能な進化スキル）</summary>
+              <div class="scenario-evolution-body">
+                <label class="opt-field">シナリオ
+                  <select id="scenarioSelect" class="card-select"></select>
+                </label>
+                <div class="scenario-evolution-list" id="scenarioEvolutionList"></div>
+              </div>
+            </details>
+          </div>
         </div>
         <div class="settings-row sub-row" id="settings">
           <span class="settings-title">査定設定</span>
