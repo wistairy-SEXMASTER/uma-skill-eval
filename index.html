@@ -393,6 +393,12 @@
     border-collapse: collapse;
     margin-top: 4px;
   }
+  .ocr-table-wrap {
+    max-height: 420px;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
   .ocr-table th,
   .ocr-table td {
     padding: 4px 6px;
@@ -977,8 +983,9 @@
           <button class="btn" id="ocrPaste" type="button">クリップボードから貼り付け</button>
           <button class="btn" id="ocrCaptureStart" type="button">画面キャプチャ開始</button>
           <button class="btn" id="ocrCaptureFrame" type="button" disabled>この画面を取り込む</button>
-          <button class="btn" id="ocrCaptureAuto" type="button" disabled>連続取り込み</button>
+          <button class="btn" id="ocrCaptureAuto" type="button" disabled>変化時取り込み</button>
           <button class="btn" id="ocrCaptureStop" type="button" disabled>停止</button>
+          <label class="toggle" id="ocrFastMode-wrap"><input type="checkbox" id="ocrFastMode" checked> 高速モード</label>
           <span class="settings-note" id="ocrCaptureHint"></span>
           <button class="btn tiny" id="ocrCopyUrl" type="button">URLをコピー</button>
           <button class="btn primary" id="ocrRun" type="button" disabled>認識開始</button>
@@ -1058,6 +1065,8 @@
           <li>「結果を選択に反映」を押すと、計算結果のSP取得スキルを選択状態にします（SP対象外の選択は保持）。</li>
           <li><b>画像認識</b>は「画像を追加」またはドラッグ＆ドロップ、クリップボード貼り付け、画面キャプチャに対応しています。画像はブラウザ内で処理され、外部に送信されません（OCRエンジンの取得のみネット接続を使用）。</li>
           <li>画面キャプチャは<b>Chrome/Edge</b>で開いた場合に利用できます。OpenCode内蔵ブラウザでは権限が拒否されるため、「画像を追加」または「クリップボードから貼り付け」を使ってください。</li>
+          <li>「<b>変化時取り込み</b>」はスクロールのフレーム変化を検出し、スクロールが止まった画面を自動保存します（最大120枚）。100件規模のヒントも画面を分けて取り込めます。</li>
+          <li><b>高速モード</b>（初期オン）はOCRを1パス・1400px・2並列で処理します。精度を優先する場合はオフにしてください。</li>
           <li><b>スキル取得画面</b>モードでは、スキル名・ヒントLv・SPを認識し、複数画像の結果をスキルごとに統合します。スクロールしながら複数枚取り込んでください。</li>
           <li><b>ウマ娘の適性</b>モードでは、キャラ名・衣装名を認識し、カードの初期適性を設定します。候補が複数ある場合は選択できます。</li>
           <li>OCRは固定座標を使わず、画像全体を正規化して認識するため、ウィンドウサイズが変わっても動作します。初回は日本語OCRデータのダウンロードで時間がかかります。</li>
@@ -1221,18 +1230,29 @@
       includeGeneral: true,
       optBudget: 1200,
       optUseFilter: true,
+      ocrFastMode: true,
     };
     let lastOptimization = null;
 
     // ---------- image recognition (OCR) ----------
     const OCR_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-    const OCR_MAX_IMAGES = 20;
+    const OCR_MAX_IMAGES = 120;
+    const OCR_CHANGE_THRESHOLD = 10;
+    const OCR_STABLE_THRESHOLD = 4;
     let ocrImages = [];
     let ocrMode = 'skills';
-    let ocrWorker = null;
+    let ocrWorkers = [];
     let ocrWorkerPromise = null;
     let ocrImageSeq = 0;
-    let ocrCapture = { stream: null, video: null, autoTimer: null };
+    let ocrCapture = {
+      stream: null,
+      video: null,
+      sampleTimer: null,
+      lastSig: null,
+      changed: false,
+      stableCount: 0,
+      lastCaptureAt: 0,
+    };
 
     function escapeHtml(value) {
       return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({
@@ -1343,6 +1363,7 @@
           state.optBudget = Math.min(OPT_MAX_BUDGET, Math.floor(budget));
         }
         if (typeof saved.optUseFilter === 'boolean') state.optUseFilter = saved.optUseFilter;
+        if (typeof saved.ocrFastMode === 'boolean') state.ocrFastMode = saved.ocrFastMode;
       } catch (err) { /* ignore */ }
     }
 
@@ -1361,6 +1382,7 @@
           includeGeneral: state.includeGeneral,
           optBudget: state.optBudget,
           optUseFilter: state.optUseFilter,
+          ocrFastMode: state.ocrFastMode,
         }));
       } catch (err) { /* ignore */ }
     }
@@ -1927,11 +1949,24 @@
     function addOcrCanvas(canvas, name) {
       if (ocrImages.length >= OCR_MAX_IMAGES) {
         ocrSetStatus(`画像は最大 ${OCR_MAX_IMAGES} 枚までです。`);
-        return;
+        return false;
+      }
+      const hash = ocrCanvasHash(canvas);
+      if (ocrImages.some((img) => img.hash === hash)) {
+        ocrSetStatus('同じ画面のため追加をスキップしました。');
+        return false;
       }
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-      ocrImages.push({ id: ++ocrImageSeq, name, dataUrl, canvas });
+      ocrImages.push({
+        id: ++ocrImageSeq,
+        name,
+        dataUrl,
+        hash,
+        width: canvas.width,
+        height: canvas.height,
+      });
       renderOcrThumbs();
+      return true;
     }
 
     async function ocrAddFile(file) {
@@ -1947,8 +1982,10 @@
       canvas.width = img.naturalWidth || img.width;
       canvas.height = img.naturalHeight || img.height;
       canvas.getContext('2d').drawImage(img, 0, 0);
-      addOcrCanvas(canvas, file.name || `画像${ocrImageSeq + 1}`);
-      ocrSetStatus(`${ocrImages.length} 枚の画像を追加しました。「認識開始」を押してください。`);
+      const added = addOcrCanvas(canvas, file.name || `画像${ocrImageSeq + 1}`);
+      if (added) {
+        ocrSetStatus(`${ocrImages.length} 枚の画像を追加しました。「認識開始」を押してください。`);
+      }
     }
 
     async function pasteOcrImage() {
@@ -2131,61 +2168,120 @@
       return bestError <= tolerance ? bestHint : null;
     }
 
+    function ocrGroupLinesIntoRows(lines) {
+      const withBox = lines.filter((l) => l.bbox && Number.isFinite(l.bbox.y0));
+      if (!withBox.length) return lines.map((l) => ({ lines: [l], y0: 0, y1: 0, cy: 0 }));
+      const sorted = withBox.slice().sort((a, b) => a.bbox.y0 - b.bbox.y0 || a.bbox.x0 - b.bbox.x0);
+      const rows = [];
+      for (const line of sorted) {
+        const h = Math.max(1, line.bbox.y1 - line.bbox.y0);
+        const cy = (line.bbox.y0 + line.bbox.y1) / 2;
+        let row = null;
+        for (const r of rows) {
+          if (Math.abs(r.cy - cy) <= Math.max(5, h * 0.55)) {
+            row = r;
+            break;
+          }
+        }
+        if (!row) {
+          row = { lines: [], cy, y0: line.bbox.y0, y1: line.bbox.y1 };
+          rows.push(row);
+        }
+        row.lines.push(line);
+        row.cy = (row.cy * (row.lines.length - 1) + cy) / row.lines.length;
+        row.y0 = Math.min(row.y0, line.bbox.y0);
+        row.y1 = Math.max(row.y1, line.bbox.y1);
+      }
+      for (const row of rows) row.lines.sort((a, b) => a.bbox.x0 - b.bbox.x0);
+      rows.sort((a, b) => a.y0 - b.y0);
+      return rows;
+    }
+
     function ocrParseSkillData(data) {
       const rawText = String(data.text || '');
       const lines = (Array.isArray(data.lines) && data.lines.length
         ? data.lines
         : rawText.split(/\r?\n/).map((t) => ({ text: t, confidence: data.confidence || 0 })))
-        .map((l) => ({ text: String(l.text || '').trim(), confidence: Number(l.confidence) || 0 }))
+        .map((l) => ({
+          text: String(l.text || '').trim(),
+          confidence: Number(l.confidence) || 0,
+          bbox: l.bbox || null,
+        }))
         .filter((l) => l.text);
 
+      const rows = ocrGroupLinesIntoRows(lines);
       const results = [];
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const norm = ocrNormalizeText(line.text);
-        if (norm.length < 2) continue;
 
-        const single = ocrBestSkillMatch(norm.replace(/\d{2,4}$/, ''));
-        let best = single ? { ...single, span: 1 } : null;
-        if (!best || best.score < 0.75) {
-          for (let span = 2; span <= 3 && i + span - 1 < lines.length; span++) {
-            let text = '';
-            let conf = 100;
-            for (let k = 0; k < span; k++) {
-              text += ocrNormalizeText(lines[i + k].text);
-              conf = Math.min(conf, lines[i + k].confidence || 0);
-            }
-            const match = ocrBestSkillMatch(text.replace(/\d{2,4}$/, ''));
-            if (match && (!best || match.score > best.score)) {
-              best = { ...match, span };
+      for (let ri = 0; ri < rows.length; ri++) {
+        const row = rows[ri];
+        const rowText = row.lines.map((l) => l.text).join(' ');
+        let best = null;
+
+        for (const line of row.lines) {
+          const norm = ocrNormalizeText(line.text);
+          if (norm.length < 2) continue;
+          let candidate = ocrBestSkillMatch(norm.replace(/\d{2,4}$/, ''));
+          if (candidate) candidate = { ...candidate, line, span: 1 };
+
+          if (!candidate || candidate.score < 0.75) {
+            const nextRowText = rows[ri + 1]?.lines.map((l) => l.text).join('') || '';
+            if (nextRowText) {
+              const merged = ocrBestSkillMatch(
+                (norm + ocrNormalizeText(nextRowText)).replace(/\d{2,4}$/, '')
+              );
+              if (merged && (!candidate || merged.score > candidate.score)) {
+                candidate = { ...merged, line, span: 2 };
+              }
             }
           }
+          if (candidate && (!best || candidate.score > best.score)) best = candidate;
+        }
+
+        if (!best) {
+          const match = ocrBestSkillMatch(ocrNormalizeText(rowText).replace(/\d{2,4}$/, ''));
+          if (match) best = { ...match, line: row.lines[0] || null, span: 1 };
         }
         if (!best) continue;
 
-        const context = [lines[i - 1], line, lines[i + 1], lines[i + 2]]
-          .filter(Boolean).map((l) => l.text).join(' ');
-        const nextLine = lines[i + 1];
-        const nextText = nextLine?.text || '';
-        const observedCost =
-          ocrExtractCost(nextText) ??
-          ocrExtractCost(line.text) ??
-          ocrExtractCost(context);
-
-        // スキル一覧は「名前 → ヒント/SP」の並びが多いため、次行を優先する。
-        // 次行にヒントもSPも無い場合だけ、さらに下・前行を見る。
-        let hint = ocrExtractHint(line.text);
-        if (hint == null) {
-          const nextHint = ocrExtractHint(nextText);
-          const nextCost = ocrExtractCost(nextText);
-          if (nextHint != null) hint = nextHint;
-          else if (/^[1-5]$/.test(nextText.trim())) hint = Number(nextText.trim());
-          else if (nextCost != null && best.skill.sp != null) hint = ocrInferHint(best.skill.sp, nextCost);
-          else hint = ocrExtractHint(lines[i + 2]?.text) ?? ocrExtractHint(lines[i - 1]?.text);
+        // 同じ行の右側（ヒントLv・SP）を優先して読む
+        let rightText = '';
+        if (best.line && best.line.bbox) {
+          rightText = row.lines
+            .filter((l) => l.bbox && l.bbox.x0 > best.line.bbox.x1 - 5)
+            .map((l) => l.text)
+            .join(' ');
         }
+
+        const rowNorm = ocrNormalizeText(rowText);
+        const skillNorm = ocrNormalizeText(best.skill.name);
+        const rowIsJustName = rowNorm === skillNorm ||
+          (rowNorm.includes(skillNorm) && rowNorm.length <= skillNorm.length + 2);
+
+        let hint = ocrExtractHint(rightText);
+        let observedCost = ocrExtractCost(rightText);
+        if (!rowIsJustName) {
+          if (hint == null) hint = ocrExtractHint(rowText);
+          if (observedCost == null) observedCost = ocrExtractCost(rowText);
+        }
+
+        // 同じ行に無ければ、次の行（名前の下にヒント/SPがあるレイアウト）を見る
+        if (hint == null && observedCost == null && rows[ri + 1]) {
+          const nextText = rows[ri + 1].lines.map((l) => l.text).join(' ');
+          hint = ocrExtractHint(nextText);
+          observedCost = ocrExtractCost(nextText);
+        }
+
+        // それでも無ければ、行順の前後を見る
+        if (hint == null && observedCost == null) {
+          const idx = best.line ? lines.indexOf(best.line) : -1;
+          const nextText = idx >= 0 ? (lines[idx + 1]?.text || '') : '';
+          hint = ocrExtractHint(nextText);
+          observedCost = ocrExtractCost(nextText);
+        }
+
         if (hint == null && observedCost != null) hint = ocrInferHint(best.skill.sp, observedCost);
 
-        const lineConf = (line.confidence || 0) / 100;
+        const lineConf = ((best.line?.confidence || 0) / 100);
         const costBonus = observedCost != null ? 0.1 : 0;
         const confidence = Math.min(1, best.score * 0.7 + Math.max(lineConf, 0.5) * 0.2 + costBonus);
 
@@ -2195,9 +2291,10 @@
           cost: observedCost,
           score: best.score,
           confidence,
-          line: line.text,
+          line: best.line?.text || rowText,
         });
       }
+
       return { results, rawText };
     }
 
@@ -2328,7 +2425,7 @@
       }).join('');
       $('ocrResult').innerHTML =
         `<div class="ocr-summary">${formatNumber(items.length)} 件のスキルを認識（平均信頼度 ${Math.round(avg * 100)}%）</div>` +
-        `<table class="ocr-table"><thead><tr><th>スキル</th><th>ヒントLv</th><th>SP</th><th>信頼度</th></tr></thead><tbody>${rows}</tbody></table>` +
+        `<div class="ocr-table-wrap"><table class="ocr-table"><thead><tr><th>スキル</th><th>ヒントLv</th><th>SP</th><th>信頼度</th></tr></thead><tbody>${rows}</tbody></table></div>` +
         `<div class="ocr-actions">` +
           `<button class="btn primary" id="ocrApplySkills" type="button">認識結果をヒントLvに反映</button>` +
           `<label class="toggle"><input type="checkbox" id="ocrSelectSkills"> 認識したスキルを選択</label>` +
@@ -2382,8 +2479,44 @@
 
     // ---------- OCR image preprocessing / engine ----------
 
+    function ocrFrameSignature(source, size = 24) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(source, 0, 0, size, size);
+      const d = ctx.getImageData(0, 0, size, size).data;
+      const out = new Uint8Array(size * size);
+      for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+        out[j] = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
+      }
+      return out;
+    }
+
+    function ocrSignatureDiff(a, b) {
+      if (!a || !b || a.length !== b.length) return 255;
+      let sum = 0;
+      for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+      return sum / a.length;
+    }
+
+    function ocrCanvasHash(canvas) {
+      const sig = ocrFrameSignature(canvas, 16);
+      let sum = 0;
+      for (const v of sig) sum += v;
+      const avg = sum / sig.length;
+      let bits = '';
+      for (const v of sig) bits += v >= avg ? '1' : '0';
+      let hex = '';
+      for (let i = 0; i < bits.length; i += 4) {
+        hex += parseInt(bits.slice(i, i + 4), 2).toString(16);
+      }
+      return hex;
+    }
+
     function ocrNormalizeCanvas(source) {
-      const scale = Math.min(2.5, Math.max(1, 1600 / Math.max(1, source.width)));
+      const targetWidth = state.ocrFastMode ? 1400 : 1800;
+      const scale = Math.min(2.5, Math.max(1, targetWidth / Math.max(1, source.width)));
       const w = Math.min(3000, Math.round(source.width * scale));
       const h = Math.max(1, Math.round(source.height * (w / source.width)));
       const canvas = document.createElement('canvas');
@@ -2465,22 +2598,27 @@
       return ocrWorkerPromise;
     }
 
-    async function getOcrWorker() {
-      if (ocrWorker) return ocrWorker;
+    async function getOcrWorkers(count = 2) {
+      if (ocrWorkers.length >= count) return ocrWorkers;
       ocrSetStatus('OCRエンジンを準備中です（初回は日本語データのダウンロードで時間がかかります）...');
       const T = await loadTesseract();
-      ocrWorker = await T.createWorker('jpn+eng', 1, {
-        logger: (m) => {
-          if (m.status === 'loading language traineddata' || m.status === 'initializing api') {
-            ocrSetStatus(`OCR準備中: ${m.status} ${Math.round((m.progress || 0) * 100)}%`);
-          }
-        },
-      });
-      await ocrWorker.setParameters({
-        tessedit_pageseg_mode: '6',
-        preserve_interword_spaces: '1',
-      });
-      return ocrWorker;
+      while (ocrWorkers.length < count) {
+        const index = ocrWorkers.length + 1;
+        ocrSetStatus(`OCRエンジンを準備中... (${index}/${count})`);
+        const worker = await T.createWorker('jpn+eng', 1, {
+          logger: (m) => {
+            if (m.status === 'loading language traineddata' || m.status === 'initializing api') {
+              ocrSetStatus(`OCR準備中: ${m.status} ${Math.round((m.progress || 0) * 100)}%`);
+            }
+          },
+        });
+        await worker.setParameters({
+          tessedit_pageseg_mode: '6',
+          preserve_interword_spaces: '1',
+        });
+        ocrWorkers.push(worker);
+      }
+      return ocrWorkers;
     }
 
     async function runOcr() {
@@ -2489,44 +2627,60 @@
       runBtn.disabled = true;
       ocrSetStatus('OCRを実行中です...');
       try {
-        const worker = await getOcrWorker();
+        const workers = await getOcrWorkers(2);
+        const results = new Array(ocrImages.length);
+        let nextIndex = 0;
+        let completed = 0;
+
+        async function processWorker(worker) {
+          while (true) {
+            const i = nextIndex++;
+            if (i >= ocrImages.length) break;
+            const img = ocrImages[i];
+            const image = await loadImage(img.dataUrl);
+            const canvas = document.createElement('canvas');
+            canvas.width = image.naturalWidth || image.width;
+            canvas.height = image.naturalHeight || image.height;
+            canvas.getContext('2d').drawImage(image, 0, 0);
+            const gray = ocrNormalizeCanvas(canvas);
+            const variants = state.ocrFastMode ? [gray] : [gray, ocrOtsuCanvas(gray)];
+            let bestParsed = null;
+            let bestRaw = '';
+
+            for (let v = 0; v < variants.length; v++) {
+              const recognized = await worker.recognize(variants[v]);
+              const data = recognized && recognized.data ? recognized.data : recognized;
+              if (ocrMode === 'skills') {
+                const parsed = ocrParseSkillData(data);
+                if (!bestParsed || parsed.results.length > bestParsed.results.length) {
+                  bestParsed = parsed;
+                  bestRaw = parsed.rawText;
+                }
+              } else {
+                const parsed = ocrParseCharacterData(data);
+                if (!bestParsed || (parsed.candidates[0]?.score || 0) > (bestParsed.candidates[0]?.score || 0)) {
+                  bestParsed = parsed;
+                  bestRaw = parsed.rawText;
+                }
+              }
+            }
+
+            results[i] = { parsed: bestParsed, raw: bestRaw, name: img.name };
+            completed++;
+            ocrSetStatus(`OCR ${completed}/${ocrImages.length} 件完了...`);
+          }
+        }
+
+        await Promise.all(workers.map((worker) => processWorker(worker)));
+
         const skillResults = [];
         const charaCandidates = [];
         let rawAll = '';
-
-        for (let i = 0; i < ocrImages.length; i++) {
-          const img = ocrImages[i];
-          ocrSetStatus(`OCR ${i + 1}/${ocrImages.length}: 前処理中...`);
-          const gray = ocrNormalizeCanvas(img.canvas);
-          const variants = [gray, ocrOtsuCanvas(gray)];
-          let bestParsed = null;
-          let bestRaw = '';
-
-          for (let v = 0; v < variants.length; v++) {
-            ocrSetStatus(`OCR ${i + 1}/${ocrImages.length}: 認識中 (${v + 1}/${variants.length})...`);
-            const recognized = await worker.recognize(variants[v]);
-            const data = recognized && recognized.data ? recognized.data : recognized;
-            if (ocrMode === 'skills') {
-              const parsed = ocrParseSkillData(data);
-              if (!bestParsed || parsed.results.length > bestParsed.results.length) {
-                bestParsed = parsed;
-                bestRaw = parsed.rawText;
-              }
-            } else {
-              const parsed = ocrParseCharacterData(data);
-              if (!bestParsed || (parsed.candidates[0]?.score || 0) > (bestParsed.candidates[0]?.score || 0)) {
-                bestParsed = parsed;
-                bestRaw = parsed.rawText;
-              }
-            }
-          }
-
-          rawAll += `--- ${img.name} ---\n${bestRaw}\n\n`;
-          if (ocrMode === 'skills') {
-            skillResults.push(...(bestParsed?.results || []));
-          } else {
-            charaCandidates.push(...(bestParsed?.candidates || []));
-          }
+        for (const r of results) {
+          if (!r) continue;
+          rawAll += `--- ${r.name} ---\n${r.raw}\n\n`;
+          if (ocrMode === 'skills') skillResults.push(...(r.parsed?.results || []));
+          else charaCandidates.push(...(r.parsed?.candidates || []));
         }
 
         if (ocrMode === 'skills') {
@@ -2612,27 +2766,59 @@
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       canvas.getContext('2d').drawImage(video, 0, 0);
-      addOcrCanvas(canvas, `キャプチャ ${ocrImages.length + 1}`);
-      ocrSetStatus(`${ocrImages.length} 枚の画像を取り込みました。続けてスクロールして取り込めます。`);
+      ocrCapture.lastCaptureAt = Date.now();
+      const added = addOcrCanvas(canvas, `キャプチャ ${ocrImages.length + 1}`);
+      if (added) {
+        ocrSetStatus(`${ocrImages.length} 枚の画像を取り込みました。続けてスクロールして取り込めます。`);
+      }
+    }
+
+    function sampleCaptureFrame() {
+      const video = ocrCapture.video;
+      if (!video || !video.videoWidth) return;
+      const sig = ocrFrameSignature(video, 24);
+      const diff = ocrSignatureDiff(sig, ocrCapture.lastSig);
+      ocrCapture.lastSig = sig;
+
+      if (diff > OCR_CHANGE_THRESHOLD) {
+        ocrCapture.changed = true;
+        ocrCapture.stableCount = 0;
+        return;
+      }
+      if (!ocrCapture.changed) return;
+      if (diff > OCR_STABLE_THRESHOLD) {
+        ocrCapture.stableCount = 0;
+        return;
+      }
+      ocrCapture.stableCount++;
+      if (ocrCapture.stableCount >= 2) {
+        captureOcrFrame();
+        ocrCapture.changed = false;
+        ocrCapture.stableCount = 0;
+      }
     }
 
     function startAutoCapture() {
-      if (ocrCapture.autoTimer) return;
-      ocrCapture.autoTimer = setInterval(() => {
+      if (ocrCapture.sampleTimer) return;
+      ocrCapture.lastSig = null;
+      ocrCapture.changed = true;
+      ocrCapture.stableCount = 0;
+      ocrCapture.lastCaptureAt = 0;
+      ocrCapture.sampleTimer = setInterval(() => {
         if (ocrImages.length >= OCR_MAX_IMAGES) {
           stopAutoCapture();
           return;
         }
-        captureOcrFrame();
-      }, 2000);
+        sampleCaptureFrame();
+      }, 250);
       $('ocrCaptureAuto').disabled = true;
-      ocrSetStatus('2秒ごとに自動取り込み中です。ゲーム画面をスクロールしてください。「停止」で終了します。');
+      ocrSetStatus('フレーム変化を検出して自動取り込み中です。スクロールを止めると、その画面を保存します。');
     }
 
     function stopAutoCapture() {
-      if (ocrCapture.autoTimer) {
-        clearInterval(ocrCapture.autoTimer);
-        ocrCapture.autoTimer = null;
+      if (ocrCapture.sampleTimer) {
+        clearInterval(ocrCapture.sampleTimer);
+        ocrCapture.sampleTimer = null;
       }
       $('ocrCaptureAuto').disabled = false;
     }
@@ -3237,6 +3423,11 @@
       $('ocrCaptureAuto').addEventListener('click', startAutoCapture);
       $('ocrCaptureStop').addEventListener('click', stopOcrCapture);
       $('ocrCopyUrl').addEventListener('click', copyOcrUrl);
+      $('ocrFastMode').addEventListener('change', (e) => {
+        state.ocrFastMode = e.target.checked;
+        e.target.closest('.toggle').classList.toggle('on', e.target.checked);
+        saveSettings();
+      });
       $('ocrRun').addEventListener('click', runOcr);
 
       $('onlyPurchasable').addEventListener('change', (e) => {
@@ -3357,6 +3548,8 @@
       renderAptFilter();
       renderOcrThumbs();
       updateOcrCaptureHint();
+      $('ocrFastMode').checked = state.ocrFastMode;
+      $('ocrFastMode-wrap').classList.toggle('on', state.ocrFastMode);
       $('optBudget').value = String(state.optBudget);
       $('optUseFilter').checked = state.optUseFilter;
       $('optUseFilter-wrap').classList.toggle('on', state.optUseFilter);
