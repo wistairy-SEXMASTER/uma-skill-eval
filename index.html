@@ -208,6 +208,95 @@
     font-size: 9.5px;
     line-height: 1.2;
   }
+  .settings-row.sub-row {
+    border-top: none;
+    padding-top: 2px;
+  }
+  .card-select {
+    max-width: 320px;
+    padding: 5px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    font-size: 12px;
+  }
+  .card-info {
+    color: #6b7280;
+    font-size: 11.5px;
+  }
+  .filter-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .filter-group > .label { color: var(--muted); }
+  .filter-chip {
+    padding: 3px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--muted);
+    font-size: 11.5px;
+    line-height: 1.4;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .filter-chip:hover { background: #f9fafb; }
+  .filter-chip.active {
+    background: var(--accent-soft);
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    font-weight: 600;
+  }
+  .optimizer {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 20px 8px;
+  }
+  .optimizer details {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .optimizer summary {
+    padding: 9px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .optimizer-body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+  }
+  .opt-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+  }
+  .opt-budget {
+    width: 96px;
+    padding: 5px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .opt-result { flex: 1 1 100%; }
+  .opt-summary { font-size: 13px; }
+  .opt-note { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .opt-list {
+    max-height: 220px;
+    overflow: auto;
+    margin: 6px 0 0;
+    padding-left: 1.3em;
+  }
+  .opt-list li { margin: 2px 0; }
+  .opt-meta { color: var(--muted); font-size: 11px; margin-left: 4px; }
 
   .badge.hint { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
   .sp-base {
@@ -646,6 +735,9 @@
     .hint-select { font-size: 11px; padding: 2px 1px; }
     .settings-row { gap: 6px 8px; font-size: 11px; }
     .apt-select { font-size: 11px; padding: 2px 3px; }
+    .card-select { max-width: 100%; }
+    .filter-chip { font-size: 11px; padding: 2px 6px; }
+    .optimizer { padding: 0 12px 8px; }
     .cart-stats { gap: 9px 12px; }
     .stat .value { font-size: 15px; }
     .stat.hide-sm { display: none; }
@@ -694,7 +786,13 @@
           <label class="toggle" id="onlySelected-wrap"><input type="checkbox" id="onlySelected"> 選択中のみ</label>
         </div>
         <div class="chips" id="typeChips"></div>
-        <div class="settings-row" id="settings">
+        <div class="settings-row" id="cardRow">
+          <span class="settings-title">ウマ娘</span>
+          <select id="cardSelect" class="card-select" title="ウマ娘を選択すると距離・脚質の初期適性を自動設定"></select>
+          <button class="btn tiny" id="btnCardAptReset" type="button" disabled>初期適性に戻す</button>
+          <span class="card-info" id="cardInfo"></span>
+        </div>
+        <div class="settings-row sub-row" id="settings">
           <span class="settings-title">査定設定</span>
           <label class="toggle" id="fastLearner-wrap" title="切れ者：ヒントLvのSP割引に −10% を加算">
             <input type="checkbox" id="fastLearner"> 切れ者
@@ -712,12 +810,37 @@
           <button class="btn tiny" id="btnAptReset" type="button" title="距離・脚質の適性をすべてAに戻す">適性リセット</button>
           <span class="settings-note" id="settingsNote"></span>
         </div>
+        <div class="settings-row" id="aptFilter">
+          <span class="settings-title">適性フィルタ</span>
+          <span class="filter-group" id="filterDistance"><span class="label">距離</span></span>
+          <span class="filter-group" id="filterGround"><span class="label">馬場</span></span>
+          <span class="filter-group" id="filterStyle"><span class="label">脚質</span></span>
+          <label class="toggle" id="includeGeneral-wrap"><input type="checkbox" id="includeGeneral" checked> 汎用を含む</label>
+          <button class="btn tiny" id="btnFilterClear" type="button">クリア</button>
+          <span class="settings-note" id="filterNote"></span>
+        </div>
       </div>
   </div>
 
   <div class="result-bar">
     <div><strong id="resultCount">0</strong> 件 <span class="hint" id="resultHint"></span></div>
     <div class="hint">行クリックで選択 / 同じグループは最上位の1つだけ集計</div>
+  </div>
+
+  <div class="optimizer" id="optimizer">
+    <details>
+      <summary>獲得SPから最大評価を計算</summary>
+      <div class="optimizer-body">
+        <label class="opt-field">獲得SP
+          <input type="number" id="optBudget" class="opt-budget" min="0" max="20000" step="10" value="1200">
+        </label>
+        <label class="toggle" id="optUseFilter-wrap"><input type="checkbox" id="optUseFilter" checked> 現在の絞り込みを使用</label>
+        <button class="btn primary" id="btnOptimize" type="button">計算</button>
+        <button class="btn" id="btnApplyOpt" type="button" disabled>結果を選択に反映</button>
+        <span class="settings-note" id="optNote"></span>
+        <div class="opt-result" id="optResult"></div>
+      </div>
+    </details>
   </div>
 
   <main class="table-wrap">
@@ -777,6 +900,10 @@
           <li>スキル説明の ＜中距離/長距離＞ のように <b>/</b> で区切られた条件は<b>良い方の適性</b>を使い、＜先行・中距離＞ のように <b>・</b> で区切られた条件は<b>両方の倍率を乗算</b>します。初期値はすべてAです。</li>
           <li><b>固有</b>スキルは「固有Lv × 170」で計算し、適性倍率は適用しません（固有Lvは「査定設定」で1〜6）。<b>継承固有</b>は一律180です。</li>
           <li><b>進化</b>スキルは通常スキルと同じく適性倍率を適用します。</li>
+          <li><b>ウマ娘</b>を選ぶと、そのカードの距離適性・脚質適性を「査定設定」に自動反映します。芝・ダート適性は表示のみで、評価点倍率には影響しません。「初期適性に戻す」で再適用できます。</li>
+          <li><b>適性フィルタ</b>は距離・馬場・脚質のチップで絞り込みます。スキルの適性条件のうち<b>いずれか1つでも一致</b>すれば表示します（例: ＜短距離・芝＞ は短距離または芝のどちらかで表示）。「汎用を含む」をオフにすると、適性条件のないスキルを除外します。</li>
+          <li><b>獲得SPから最大評価を計算</b>は、入力したSP予算内で合計評価点が最大になるスキルの組み合わせを求めます。同じグループは最上位1つを選び、下位スキルのSPもコストに含めます。ヒントLv・切れ者・適性倍率を反映します。固有・継承固有などSP対象外のスキルは計算対象外です。</li>
+          <li>「結果を選択に反映」を押すと、計算結果のSP取得スキルを選択状態にします（SP対象外の選択は保持）。</li>
           <li>特殊スキル（ストーリー・イベント用）と期限切れスキルは収録していません。データは <code>extract_skills.py</code> で再生成できます。</li>
         </ul>
       </div>
@@ -815,7 +942,7 @@
     </div>
   </div>
 
-  <script src="data/skills.js?v=1793960723"></script>
+  <script src="data/skills.js?v=1793962968"></script>
   <script>
   (() => {
     'use strict';
@@ -856,6 +983,16 @@
       3: { short: '差', long: '差し' },
       4: { short: '追', long: '追込' },
     };
+    const GROUND_META = {
+      1: { short: '芝', long: '芝' },
+      2: { short: 'ダ', long: 'ダート' },
+    };
+    const FILTER_CATEGORIES = [
+      { key: 'distance', groupId: 'filterDistance', meta: DISTANCE_META },
+      { key: 'ground', groupId: 'filterGround', meta: GROUND_META },
+      { key: 'style', groupId: 'filterStyle', meta: STYLE_META },
+    ];
+    const OPT_MAX_BUDGET = 20000;
     const FAST_LEARNER_DISCOUNT = 0.10;
     const UNIQUE_POINT_PER_LEVEL = 170; // 本体固有スキル: 固有Lv × 170
     const INHERIT_UNIQUE_POINT = 180;   // 継承固有スキル: 一律180
@@ -870,6 +1007,12 @@
 
     const $ = (id) => document.getElementById(id);
     const byId = new Map(SKILLS.map((s) => [s.skill_id, s]));
+    const CARDS = (Array.isArray(DATA.cards) ? DATA.cards : []).filter((c) =>
+      c.aptitude &&
+      c.aptitude.distance && c.aptitude.distance['1'] &&
+      c.aptitude.style && c.aptitude.style['1']
+    );
+    const cardsById = new Map(CARDS.map((c) => [c.card_id, c]));
 
     // 下位スキル連鎖（同じ group_id の下位 group_rate。rate ごとの代表は評価点最大）
     const REPRESENTATIVE = new Map();
@@ -911,7 +1054,17 @@
         distance: { 1: 'A', 2: 'A', 3: 'A', 4: 'A' },
         style: { 1: 'A', 2: 'A', 3: 'A', 4: 'A' },
       },
+      cardId: null,
+      aptFilter: {
+        distance: new Set(),
+        ground: new Set(),
+        style: new Set(),
+      },
+      includeGeneral: true,
+      optBudget: 1200,
+      optUseFilter: true,
     };
+    let lastOptimization = null;
 
     function escapeHtml(value) {
       return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({
@@ -987,7 +1140,7 @@
       } catch (err) { /* ignore */ }
     }
 
-    // 査定設定（切れ者・固有Lv・適性）を復元
+    // 査定設定（切れ者・固有Lv・適性・ウマ娘・フィルタ・最適化）を復元
     function loadSettings() {
       try {
         const raw = localStorage.getItem(SETTINGS_KEY);
@@ -1005,6 +1158,23 @@
             if (APT_MULT[grade] != null) state.aptitude[cat][id] = grade;
           }
         }
+        const cardId = Number(saved.cardId);
+        if (Number.isInteger(cardId) && cardsById.has(cardId)) state.cardId = cardId;
+        if (saved.aptFilter && typeof saved.aptFilter === 'object') {
+          for (const cat of ['distance', 'ground', 'style']) {
+            const values = saved.aptFilter[cat];
+            if (!Array.isArray(values)) continue;
+            state.aptFilter[cat] = new Set(
+              values.map((v) => Number(v)).filter((v) => Number.isInteger(v) && v >= 1 && v <= 4)
+            );
+          }
+        }
+        if (typeof saved.includeGeneral === 'boolean') state.includeGeneral = saved.includeGeneral;
+        const budget = Number(saved.optBudget);
+        if (Number.isFinite(budget) && budget >= 0) {
+          state.optBudget = Math.min(OPT_MAX_BUDGET, Math.floor(budget));
+        }
+        if (typeof saved.optUseFilter === 'boolean') state.optUseFilter = saved.optUseFilter;
       } catch (err) { /* ignore */ }
     }
 
@@ -1014,6 +1184,15 @@
           fastLearner: state.fastLearner,
           uniqueLevel: state.uniqueLevel,
           aptitude: state.aptitude,
+          cardId: state.cardId,
+          aptFilter: {
+            distance: [...state.aptFilter.distance],
+            ground: [...state.aptFilter.ground],
+            style: [...state.aptFilter.style],
+          },
+          includeGeneral: state.includeGeneral,
+          optBudget: state.optBudget,
+          optUseFilter: state.optUseFilter,
         }));
       } catch (err) { /* ignore */ }
     }
@@ -1050,13 +1229,34 @@
       const parts = [];
       const distances = parseAptList(s.apt_distance);
       const styles = parseAptList(s.apt_style);
+      const grounds = parseAptList(s.apt_ground);
       if (distances.length) {
         parts.push('距離 ' + distances.map((id) => DISTANCE_META[id].long).join('/'));
       }
       if (styles.length) {
         parts.push('脚質 ' + styles.map((id) => STYLE_META[id].long).join('/'));
       }
+      if (grounds.length) {
+        parts.push('馬場 ' + grounds.map((id) => GROUND_META[id].long).join('/'));
+      }
       return parts.length ? parts.join('・') : 'なし';
+    }
+
+    // 適性フィルタ: 距離・馬場・脚質のいずれかの条件が一致すれば表示
+    function skillMatchesAptFilter(s) {
+      const filter = state.aptFilter;
+      if (!filter.distance.size && !filter.ground.size && !filter.style.size) return true;
+      const distances = parseAptList(s.apt_distance);
+      const styles = parseAptList(s.apt_style);
+      const grounds = parseAptList(s.apt_ground);
+      if (!distances.length && !styles.length && !grounds.length) {
+        return state.includeGeneral;
+      }
+      return (
+        distances.some((id) => filter.distance.has(id)) ||
+        styles.some((id) => filter.style.has(id)) ||
+        grounds.some((id) => filter.ground.has(id))
+      );
     }
 
     // 適性による評価点倍率。固有・継承固有は対象外。
@@ -1120,6 +1320,8 @@
         s._efficiency = sp != null && sp > 0 ? s._upgrade_point / sp : null;
         s._total_efficiency = totalSp != null && totalSp > 0 ? s._eval / totalSp : null;
       }
+
+      invalidateOptimization();
     }
 
     function initMeta() {
@@ -1247,7 +1449,105 @@
       }
     }
 
-    function filteredSkills() {
+    function initCards() {
+      const select = $('cardSelect');
+      if (!select) return;
+      const byChara = new Map();
+      for (const card of CARDS) {
+        const key = card.chara_name || String(card.chara_id);
+        if (!byChara.has(key)) byChara.set(key, []);
+        byChara.get(key).push(card);
+      }
+      const charaNames = [...byChara.keys()].sort((a, b) => a.localeCompare(b, 'ja'));
+      let html = '<option value="">ウマ娘を選択しない</option>';
+      for (const name of charaNames) {
+        html += `<optgroup label="${escapeHtml(name)}">`;
+        const cards = byChara.get(name)
+          .slice()
+          .sort((a, b) => (a.costume_name || '').localeCompare(b.costume_name || '', 'ja'));
+        for (const card of cards) {
+          const label = card.display_name || card.costume_name || String(card.card_id);
+          html += `<option value="${card.card_id}">${escapeHtml(label)}</option>`;
+        }
+        html += '</optgroup>';
+      }
+      select.innerHTML = html;
+      select.value = state.cardId != null ? String(state.cardId) : '';
+      updateCardInfo();
+    }
+
+    function updateCardInfo() {
+      const info = $('cardInfo');
+      const reset = $('btnCardAptReset');
+      const card = state.cardId != null ? cardsById.get(state.cardId) : null;
+      if (!info) return;
+      if (!card) {
+        info.textContent = '選択すると距離・脚質の初期適性を自動設定します。';
+        if (reset) reset.disabled = true;
+        return;
+      }
+      const ground = card.aptitude.ground;
+      info.textContent =
+        `${card.display_name || card.chara_name}` +
+        ` ／ 芝 ${ground['1'] || '—'}・ダート ${ground['2'] || '—'}` +
+        ` ／ 初期脚質 ${card.running_style_name || '—'}`;
+      if (reset) reset.disabled = false;
+    }
+
+    function applyCardAptitudes(card) {
+      if (!card) return;
+      for (const id of ['1', '2', '3', '4']) {
+        state.aptitude.distance[id] = card.aptitude.distance[id] || 'A';
+        state.aptitude.style[id] = card.aptitude.style[id] || 'A';
+      }
+    }
+
+    function renderAptFilter() {
+      for (const { key, groupId, meta } of FILTER_CATEGORIES) {
+        const group = $(groupId);
+        if (!group) continue;
+        if (group.querySelectorAll('.filter-chip').length === 0) {
+          for (const id of Object.keys(meta)) {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'filter-chip';
+            chip.dataset.filterCat = key;
+            chip.dataset.filterValue = id;
+            chip.textContent = meta[id].long;
+            chip.title = `${meta[id].long}のスキルを表示`;
+            group.appendChild(chip);
+          }
+        }
+        for (const chip of group.querySelectorAll('.filter-chip')) {
+          const active = state.aptFilter[key].has(Number(chip.dataset.filterValue));
+          chip.classList.toggle('active', active);
+          chip.setAttribute('aria-pressed', String(active));
+        }
+      }
+
+      const general = $('includeGeneral');
+      if (general) {
+        general.checked = state.includeGeneral;
+        $('includeGeneral-wrap')?.classList.toggle('on', state.includeGeneral);
+      }
+      const note = $('filterNote');
+      if (note) {
+        const count = state.aptFilter.distance.size + state.aptFilter.ground.size + state.aptFilter.style.size;
+        note.textContent = count
+          ? `いずれかの条件に一致（汎用${state.includeGeneral ? 'を含む' : 'を除く'}）`
+          : '';
+      }
+    }
+
+    function onFilterChanged() {
+      saveSettings();
+      invalidateOptimization();
+      state.page = 1;
+      renderAptFilter();
+      render();
+    }
+
+    function filteredSkills(options = {}) {
       const terms = normalize(state.query).split(/\s+/).filter(Boolean);
       const out = [];
       for (const s of SKILLS) {
@@ -1255,7 +1555,8 @@
         if (state.category && String(s.category) !== state.category) continue;
         if (state.onlyPurchasable && !(s.sp != null && s.sp > 0)) continue;
         if (!state.includeNegative && (s.group_rate < 0 || s.eval_point < 0)) continue;
-        if (state.onlySelected && !state.selected.has(s.skill_id)) continue;
+        if (!options.ignoreOnlySelected && state.onlySelected && !state.selected.has(s.skill_id)) continue;
+        if (!skillMatchesAptFilter(s)) continue;
         if (terms.length) {
           let ok = true;
           for (const t of terms) {
@@ -1266,6 +1567,161 @@
         out.push(s);
       }
       return out;
+    }
+
+    function invalidateOptimization() {
+      if (!lastOptimization) return;
+      lastOptimization = null;
+      const apply = $('btnApplyOpt');
+      if (apply) apply.disabled = true;
+      const out = $('optResult');
+      if (out) out.innerHTML = '<div class="opt-note">設定が変更されました。再計算してください。</div>';
+    }
+
+    function optimizerCandidates() {
+      const pool = state.optUseFilter
+        ? filteredSkills({ ignoreOnlySelected: true })
+        : SKILLS;
+      return pool.filter((s) =>
+        s.sp != null && s.sp > 0 &&
+        s._total_sp != null && s._total_sp > 0 &&
+        s._eval > 0 &&
+        s.group_rate >= 0 &&
+        s.type !== '特殊'
+      );
+    }
+
+    // グループごとに「どの上位段階まで取るか」を選ぶ多重選択ナップサック。
+    // 価値 = 適性込み評価点、コスト = 下位込みSP（ヒント・切れ者込み）。
+    function optimizeSkills(budget) {
+      const candidates = optimizerCandidates();
+      if (!candidates.length) return null;
+
+      const groups = new Map();
+      for (const s of candidates) {
+        const list = groups.get(s.group_id);
+        if (list) list.push(s);
+        else groups.set(s.group_id, [s]);
+      }
+      const groupList = [...groups.values()];
+      const sumMax = groupList.reduce(
+        (sum, packages) => sum + Math.max(...packages.map((p) => p._total_sp)),
+        0
+      );
+      const maxBudget = Math.max(0, Math.min(Math.floor(budget), OPT_MAX_BUDGET, sumMax));
+      const dp = new Float64Array(maxBudget + 1).fill(-Infinity);
+      dp[0] = 0;
+
+      const choices = [];
+      for (const packages of groupList) {
+        const costs = packages.map((p) => p._total_sp);
+        const values = packages.map((p) => p._eval);
+        const choice = new Int16Array(maxBudget + 1).fill(-1);
+        for (let b = maxBudget; b >= 0; b--) {
+          let best = dp[b];
+          let bestIdx = -1;
+          for (let i = 0; i < packages.length; i++) {
+            const cost = costs[i];
+            if (cost > b) continue;
+            const prev = dp[b - cost];
+            if (prev === -Infinity) continue;
+            const value = prev + values[i];
+            if (value > best || (value === best && bestIdx !== -1 && cost < costs[bestIdx])) {
+              best = value;
+              bestIdx = i;
+            }
+          }
+          dp[b] = best;
+          choice[b] = bestIdx;
+        }
+        choices.push(choice);
+      }
+
+      let bestBudget = -1;
+      let bestValue = -Infinity;
+      for (let b = 0; b <= maxBudget; b++) {
+        if (dp[b] > bestValue) {
+          bestValue = dp[b];
+          bestBudget = b;
+        }
+      }
+      if (bestBudget < 0 || bestValue === -Infinity) return null;
+
+      const chosen = [];
+      let b = bestBudget;
+      for (let g = groupList.length - 1; g >= 0; g--) {
+        const idx = choices[g][b];
+        if (idx >= 0) {
+          const skill = groupList[g][idx];
+          chosen.push(skill);
+          b -= skill._total_sp;
+        }
+      }
+      chosen.sort((a, b2) =>
+        a.group_id - b2.group_id || a.group_rate - b2.group_rate || a.skill_id - b2.skill_id
+      );
+
+      return {
+        chosen,
+        totalEval: bestValue,
+        totalSp: bestBudget,
+        efficiency: bestBudget > 0 ? bestValue / bestBudget : null,
+        candidates: candidates.length,
+        groups: groupList.length,
+        budget: Math.floor(budget),
+        capped: budget > OPT_MAX_BUDGET,
+      };
+    }
+
+    function runOptimization() {
+      const input = $('optBudget');
+      const budget = Math.max(0, Math.min(OPT_MAX_BUDGET, Math.floor(Number(input.value) || 0)));
+      state.optBudget = budget;
+      if (input) input.value = String(budget);
+      saveSettings();
+
+      const started = performance.now();
+      const result = optimizeSkills(budget);
+      const elapsed = performance.now() - started;
+      lastOptimization = result;
+
+      const out = $('optResult');
+      const apply = $('btnApplyOpt');
+      if (!result || !result.chosen.length) {
+        out.innerHTML =
+          '<div class="opt-note">条件に合うSP取得可能スキルがありません。絞り込み条件や予算を確認してください。</div>';
+        if (apply) apply.disabled = true;
+        return;
+      }
+      if (apply) apply.disabled = false;
+
+      const efficiency = result.efficiency == null ? '—' : result.efficiency.toFixed(2);
+      const items = result.chosen.map((s) =>
+        `<li>${escapeHtml(s.name)}` +
+        `<span class="opt-meta">SP ${formatNumber(s._total_sp)} / 評価 ${formatNumber(s._eval)}</span></li>`
+      ).join('');
+      out.innerHTML =
+        `<div class="opt-summary">最大評価点 <b>${formatNumber(result.totalEval)}</b> ／ ` +
+        `合計SP <b>${formatNumber(result.totalSp)}</b> ／ 評価効率 <b>${efficiency}</b></div>` +
+        `<div class="opt-note">対象 ${formatNumber(result.candidates)} スキル` +
+        `（${formatNumber(result.groups)} グループ）・計算 ${elapsed.toFixed(0)}ms` +
+        (result.capped ? `・予算上限 ${formatNumber(OPT_MAX_BUDGET)}SP` : '') +
+        `</div>` +
+        `<ol class="opt-list">${items}</ol>`;
+    }
+
+    function applyOptimizationResult() {
+      if (!lastOptimization || !lastOptimization.chosen.length) return;
+      // SP対象外（固有など）の選択は保持し、SP取得スキルだけを入れ替える
+      const keep = [...state.selected]
+        .map((id) => byId.get(id))
+        .filter((s) => s && s.sp == null);
+      state.selected = new Set([
+        ...keep.map((s) => s.skill_id),
+        ...lastOptimization.chosen.map((s) => s.skill_id),
+      ]);
+      saveSelection();
+      render();
     }
 
     function compareSkills(a, b) {
@@ -1635,7 +2091,8 @@
       );
       const header = [
         'skill_id', 'name', 'type', 'rarity',
-        'eval_base', 'eval_point', 'aptitude_distance', 'aptitude_style', 'aptitude_multiplier',
+        'eval_base', 'eval_point', 'aptitude_distance', 'aptitude_style', 'aptitude_ground',
+        'aptitude_multiplier', 'aptitude_source',
         'unique_level', 'fast_learner',
         'sp_base', 'hint_level', 'sp',
         'upgrade_point', 'efficiency',
@@ -1649,7 +2106,9 @@
           ...s,
           eval_base: s.eval_point,
           eval_point: s._eval,
+          aptitude_ground: s.apt_ground || '',
           aptitude_multiplier: Math.round(s._apt_factor * 1000) / 1000,
+          aptitude_source: s.apt_source || '',
           unique_level: state.uniqueLevel,
           fast_learner: state.fastLearner ? 1 : 0,
           sp_base: s.sp,
@@ -1693,14 +2152,12 @@
     function bind() {
       $('search').addEventListener('input', (e) => {
         state.query = e.target.value;
-        state.page = 1;
-        render();
+        onFilterChanged();
       });
 
       $('category').addEventListener('change', (e) => {
         state.category = e.target.value;
-        state.page = 1;
-        render();
+        onFilterChanged();
       });
 
       $('sort').addEventListener('change', (e) => {
@@ -1744,25 +2201,90 @@
         render();
       });
 
+      $('cardSelect').addEventListener('change', (e) => {
+        const id = Number(e.target.value);
+        if (!id) {
+          state.cardId = null;
+          saveSettings();
+          updateCardInfo();
+          return;
+        }
+        const card = cardsById.get(id);
+        if (!card) return;
+        state.cardId = id;
+        applyCardAptitudes(card);
+        saveSettings();
+        renderSettings();
+        updateCardInfo();
+        recomputeDerived();
+        render();
+      });
+
+      $('btnCardAptReset').addEventListener('click', () => {
+        const card = state.cardId != null ? cardsById.get(state.cardId) : null;
+        if (!card) return;
+        applyCardAptitudes(card);
+        saveSettings();
+        renderSettings();
+        recomputeDerived();
+        render();
+      });
+
+      $('aptFilter').addEventListener('click', (e) => {
+        const chip = e.target.closest('.filter-chip');
+        if (!chip) return;
+        const cat = chip.dataset.filterCat;
+        const value = Number(chip.dataset.filterValue);
+        if (!state.aptFilter[cat]) return;
+        if (state.aptFilter[cat].has(value)) state.aptFilter[cat].delete(value);
+        else state.aptFilter[cat].add(value);
+        onFilterChanged();
+      });
+
+      $('includeGeneral').addEventListener('change', (e) => {
+        state.includeGeneral = e.target.checked;
+        onFilterChanged();
+      });
+
+      $('btnFilterClear').addEventListener('click', () => {
+        for (const cat of ['distance', 'ground', 'style']) state.aptFilter[cat].clear();
+        onFilterChanged();
+      });
+
+      $('optBudget').addEventListener('change', (e) => {
+        const budget = Math.max(0, Math.min(OPT_MAX_BUDGET, Math.floor(Number(e.target.value) || 0)));
+        state.optBudget = budget;
+        e.target.value = String(budget);
+        saveSettings();
+        invalidateOptimization();
+      });
+
+      $('optUseFilter').addEventListener('change', (e) => {
+        state.optUseFilter = e.target.checked;
+        e.target.closest('.toggle').classList.toggle('on', e.target.checked);
+        saveSettings();
+        invalidateOptimization();
+      });
+
+      $('btnOptimize').addEventListener('click', runOptimization);
+      $('btnApplyOpt').addEventListener('click', applyOptimizationResult);
+
       $('onlyPurchasable').addEventListener('change', (e) => {
         state.onlyPurchasable = e.target.checked;
         e.target.closest('.toggle').classList.toggle('on', e.target.checked);
-        state.page = 1;
-        render();
+        onFilterChanged();
       });
 
       $('includeNegative').addEventListener('change', (e) => {
         state.includeNegative = e.target.checked;
         e.target.closest('.toggle').classList.toggle('on', e.target.checked);
-        state.page = 1;
-        render();
+        onFilterChanged();
       });
 
       $('onlySelected').addEventListener('change', (e) => {
         state.onlySelected = e.target.checked;
         e.target.closest('.toggle').classList.toggle('on', e.target.checked);
-        state.page = 1;
-        render();
+        onFilterChanged();
       });
 
       $('typeChips').addEventListener('click', (e) => {
@@ -1778,9 +2300,8 @@
         } else {
           state.types.add(type);
         }
-        state.page = 1;
         renderTypeChips();
-        render();
+        onFilterChanged();
       });
 
       $('tbody').addEventListener('click', (e) => {
@@ -1860,8 +2381,13 @@
       initCategory();
       renderTypeChips();
       loadSettings();
+      initCards();
       recomputeDerived();
       renderSettings();
+      renderAptFilter();
+      $('optBudget').value = String(state.optBudget);
+      $('optUseFilter').checked = state.optUseFilter;
+      $('optUseFilter-wrap').classList.toggle('on', state.optUseFilter);
       bind();
       updateStickyOffset();
       render();

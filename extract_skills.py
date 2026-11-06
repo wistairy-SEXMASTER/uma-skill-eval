@@ -69,12 +69,14 @@ FIELDS = [
     "end_date",
     "apt_distance",
     "apt_style",
+    "apt_ground",
     "apt_source",
 ]
 
 # 説明文の ＜...＞ タグに使われる適性名と、DB の distance_type / running_style の対応
 DISTANCE_IDS = {"短距離": 1, "マイル": 2, "中距離": 3, "長距離": 4}
 STYLE_IDS = {"大逃げ": 1, "逃げ": 1, "先行": 2, "差し": 3, "追込": 4}
+GROUND_IDS = {"芝": 1, "ダート": 2}
 APT_TAG_RE = re.compile(r"[<＜]([^>＞]{1,40})[>＞]")
 APTITUDE_LESS_TYPES = ("固有", "継承固有")
 
@@ -108,18 +110,19 @@ def type_label(skill_id: int, rarity: int) -> str:
     return "その他"
 
 
-def parse_aptitude_tag(tag: str) -> tuple[list[int], list[int]]:
-    """説明文の ＜...＞ を距離適性ID・脚質適性IDに分解する。
+def parse_aptitude_tag(tag: str) -> tuple[list[int], list[int], list[int]]:
+    """説明文の ＜...＞ を距離適性ID・脚質適性ID・馬場IDに分解する。
 
     - 「/」は同じカテゴリ内のOR（良い方を使用）
     - 「・」は異なるカテゴリのAND（倍率を乗算）
-    - 芝・ダートは評価点倍率の対象外なので捨てる
+    - 芝・ダートは評価点倍率の対象外だが、絞り込み用に保持する
     """
     text = tag.strip()
     if text.startswith("作戦・"):
         text = text[len("作戦・"):]
     distances: set[int] = set()
     styles: set[int] = set()
+    grounds: set[int] = set()
     for group in text.split("・"):
         for part in group.split("/"):
             part = part.strip()
@@ -127,42 +130,54 @@ def parse_aptitude_tag(tag: str) -> tuple[list[int], list[int]]:
                 distances.add(DISTANCE_IDS[part])
             if part in STYLE_IDS:
                 styles.add(STYLE_IDS[part])
-    return sorted(distances), sorted(styles)
+            if part in GROUND_IDS:
+                grounds.add(GROUND_IDS[part])
+    return sorted(distances), sorted(styles), sorted(grounds)
 
 
-def aptitude_from_conditions(text: str) -> tuple[list[int], list[int]]:
-    """説明文タグがない場合のフォールバック。単一の条件だけを適性とみなす。"""
+def aptitude_from_conditions(text: str) -> tuple[list[int], list[int], list[int]]:
+    """発動条件から距離・脚質・馬場のIDを拾う（重複なし）。"""
     distances = {int(x) for x in re.findall(r"distance_type\s*==\s*(\d+)", text)}
     styles = {int(x) for x in re.findall(r"running_style\s*==\s*(\d+)", text)}
-    return (
-        sorted(distances) if len(distances) == 1 else [],
-        sorted(styles) if len(styles) == 1 else [],
-    )
+    grounds = {int(x) for x in re.findall(r"ground_type\s*==\s*(\d+)", text)}
+    return sorted(distances), sorted(styles), sorted(grounds)
 
 
-def aptitude_for(row: dict, skill_type: str) -> tuple[str, str, str]:
+def aptitude_for(row: dict, skill_type: str) -> tuple[str, str, str, str]:
     tags = APT_TAG_RE.findall(row.get("description") or "")
-    if tags:
-        distances, styles = parse_aptitude_tag(tags[0])
-        if distances or styles:
-            return (
-                "/".join(map(str, distances)),
-                "/".join(map(str, styles)),
-                "tag",
-            )
-    if skill_type in APTITUDE_LESS_TYPES:
-        return "", "", ""
     condition = " ".join(
         value for value in (row.get("condition"), row.get("precondition")) if value
     )
-    distances, styles = aptitude_from_conditions(condition)
-    if distances or styles:
+    cond_distances, cond_styles, cond_grounds = aptitude_from_conditions(condition)
+
+    if tags:
+        distances, styles, grounds = parse_aptitude_tag(tags[0])
+        # 発動条件に馬場指定があれば、タグに無くても絞り込み用に補完する
+        grounds = sorted(set(grounds) | set(cond_grounds))
+        source = "tag" if (distances or styles or grounds) else ""
         return (
             "/".join(map(str, distances)),
             "/".join(map(str, styles)),
-            "condition",
+            "/".join(map(str, grounds)),
+            source,
         )
-    return "", "", ""
+
+    grounds = cond_grounds
+    if skill_type in APTITUDE_LESS_TYPES:
+        # 固有・継承固有は評価点倍率の対象外だが、絞り込み用に条件を保持する
+        distances, styles = cond_distances, cond_styles
+    else:
+        # 通常スキルは単一条件のみを適性として扱う（誤った倍率適用を避ける）
+        distances = cond_distances if len(cond_distances) == 1 else []
+        styles = cond_styles if len(cond_styles) == 1 else []
+
+    source = "condition" if (distances or styles or grounds) else ""
+    return (
+        "/".join(map(str, distances)),
+        "/".join(map(str, styles)),
+        "/".join(map(str, grounds)),
+        source,
+    )
 
 
 def load_rows(con: sqlite3.Connection) -> list[dict]:
@@ -210,6 +225,79 @@ def load_rows(con: sqlite3.Connection) -> list[dict]:
             }
         )
     return rows
+
+
+APTITUDE_GRADE = {1: "G", 2: "F", 3: "E", 4: "D", 5: "C", 6: "B", 7: "A", 8: "S"}
+RUNNING_STYLE_NAMES = {1: "逃げ", 2: "先行", 3: "差し", 4: "追込"}
+
+
+def load_cards(con: sqlite3.Connection) -> list[dict]:
+    """カード（ウマ娘）ごとの初期適性を読み込む。適性はレアリティ間で共通。"""
+    sql = """
+        SELECT
+            c.id AS card_id,
+            c.chara_id,
+            c.default_rarity,
+            c.running_style,
+            t170.text AS chara_name,
+            t4.text AS display_name,
+            t5.text AS costume_name,
+            r.proper_distance_short,
+            r.proper_distance_mile,
+            r.proper_distance_middle,
+            r.proper_distance_long,
+            r.proper_running_style_nige,
+            r.proper_running_style_senko,
+            r.proper_running_style_sashi,
+            r.proper_running_style_oikomi,
+            r.proper_ground_turf,
+            r.proper_ground_dirt
+        FROM card_data AS c
+        LEFT JOIN card_rarity_data AS r
+            ON r.card_id = c.id
+            AND r.rarity = (SELECT MIN(rarity) FROM card_rarity_data WHERE card_id = c.id)
+        LEFT JOIN text_data AS t170 ON t170.category = 170 AND t170."index" = c.chara_id
+        LEFT JOIN text_data AS t4 ON t4.category = 4 AND t4."index" = c.id
+        LEFT JOIN text_data AS t5 ON t5.category = 5 AND t5."index" = c.id
+        ORDER BY c.chara_id, c.id
+    """
+
+    def grade(value) -> str:
+        return APTITUDE_GRADE.get(int(value or 0), "")
+
+    cards = []
+    for r in con.execute(sql):
+        cards.append(
+            {
+                "card_id": int(r["card_id"]),
+                "chara_id": int(r["chara_id"]),
+                "chara_name": clean_text(r["chara_name"]),
+                "display_name": clean_text(r["display_name"]),
+                "costume_name": clean_text(r["costume_name"]),
+                "rarity": int(r["default_rarity"] or 0),
+                "running_style": int(r["running_style"] or 0),
+                "running_style_name": RUNNING_STYLE_NAMES.get(int(r["running_style"] or 0), ""),
+                "aptitude": {
+                    "distance": {
+                        "1": grade(r["proper_distance_short"]),
+                        "2": grade(r["proper_distance_mile"]),
+                        "3": grade(r["proper_distance_middle"]),
+                        "4": grade(r["proper_distance_long"]),
+                    },
+                    "style": {
+                        "1": grade(r["proper_running_style_nige"]),
+                        "2": grade(r["proper_running_style_senko"]),
+                        "3": grade(r["proper_running_style_sashi"]),
+                        "4": grade(r["proper_running_style_oikomi"]),
+                    },
+                    "ground": {
+                        "1": grade(r["proper_ground_turf"]),
+                        "2": grade(r["proper_ground_dirt"]),
+                    },
+                },
+            }
+        )
+    return cards
 
 
 def build_groups(rows: list[dict]) -> dict[int, list[dict]]:
@@ -268,7 +356,7 @@ def analyze(rows: list[dict], now: int) -> list[dict]:
         if skill_type == "レア" and 300_000 <= sid < 400_000 and eval_point == 0 and sp is None:
             skill_type = "特殊"
 
-        apt_distance, apt_style, apt_source = aptitude_for(r, skill_type)
+        apt_distance, apt_style, apt_ground, apt_source = aptitude_for(r, skill_type)
 
         out.append(
             {
@@ -295,6 +383,7 @@ def analyze(rows: list[dict], now: int) -> list[dict]:
                 "end_date": r["end_date"],
                 "apt_distance": apt_distance,
                 "apt_style": apt_style,
+                "apt_ground": apt_ground,
                 "apt_source": apt_source,
                 "_sort": sid,
             }
@@ -318,12 +407,17 @@ def write_json(path: Path, rows: list[dict], meta: dict) -> None:
         json.dump(payload, f, ensure_ascii=False, indent=1)
 
 
-def write_js(path: Path, rows: list[dict], meta: dict) -> None:
+def write_js(path: Path, rows: list[dict], meta: dict, cards: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     # index.html から <script src="data/skills.js"> で読み込む
     with path.open("w", encoding="utf-8") as f:
         f.write("window.SKILL_DATA = ")
-        json.dump({"meta": meta, "skills": rows}, f, ensure_ascii=False, separators=(",", ":"))
+        json.dump(
+            {"meta": meta, "skills": rows, "cards": cards},
+            f,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
         f.write(";\n")
 
 
@@ -359,6 +453,7 @@ def main() -> int:
     now = int(time.time())
     con = connect(db_path)
     raw = load_rows(con)
+    cards = load_cards(con)
     con.close()
 
     if not raw:
@@ -372,6 +467,7 @@ def main() -> int:
         "db_mtime": datetime.fromtimestamp(db_path.stat().st_mtime).isoformat(timespec="seconds"),
         "generated_at": datetime.fromtimestamp(now).isoformat(timespec="seconds"),
         "total": len(rows),
+        "cards": len(cards),
         "note": "eval_point=grade_value, sp=need_skill_point, upgrade_point=下位スキルからの上昇分, total_sp=下位込みSP",
     }
 
@@ -383,7 +479,12 @@ def main() -> int:
     )
     write_json(out_dir / "skills.json", rows, meta)
     write_csv(out_dir / "skills_rating.csv", [r for r in rows if r["available"] and r["type"] != "特殊"])
-    write_js(Path(args.js), [r for r in rows if r["available"] and r["type"] != "特殊"], meta)
+    write_js(
+        Path(args.js),
+        [r for r in rows if r["available"] and r["type"] != "特殊"],
+        meta,
+        cards,
+    )
     update_index_cache_version(Path(args.js).resolve().parent.parent / "index.html", str(now))
 
     # レポート
@@ -391,6 +492,7 @@ def main() -> int:
     print(f"DB: {db_path}")
     print(f"最終更新: {meta['db_mtime']}  / 抽出: {meta['generated_at']}")
     print(f"スキル数: {len(rows)}  (期限切れ {sum(1 for r in rows if not r['available'])} 件を含む)")
+    print(f"ウマ娘カード: {len(cards)} 件")
     print("種別:", ", ".join(f"{k}={v}" for k, v in by_type.most_common()))
     purch = [r for r in rows if r["purchasable"] and r["available"]]
     print(f"SP取得可能: {len(purch)} 件")
