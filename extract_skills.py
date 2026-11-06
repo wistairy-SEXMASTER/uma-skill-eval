@@ -20,6 +20,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -66,7 +67,16 @@ FIELDS = [
     "description",
     "start_date",
     "end_date",
+    "apt_distance",
+    "apt_style",
+    "apt_source",
 ]
+
+# 説明文の ＜...＞ タグに使われる適性名と、DB の distance_type / running_style の対応
+DISTANCE_IDS = {"短距離": 1, "マイル": 2, "中距離": 3, "長距離": 4}
+STYLE_IDS = {"大逃げ": 1, "逃げ": 1, "先行": 2, "差し": 3, "追込": 4}
+APT_TAG_RE = re.compile(r"[<＜]([^>＞]{1,40})[>＞]")
+APTITUDE_LESS_TYPES = ("固有", "継承固有")
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -98,6 +108,63 @@ def type_label(skill_id: int, rarity: int) -> str:
     return "その他"
 
 
+def parse_aptitude_tag(tag: str) -> tuple[list[int], list[int]]:
+    """説明文の ＜...＞ を距離適性ID・脚質適性IDに分解する。
+
+    - 「/」は同じカテゴリ内のOR（良い方を使用）
+    - 「・」は異なるカテゴリのAND（倍率を乗算）
+    - 芝・ダートは評価点倍率の対象外なので捨てる
+    """
+    text = tag.strip()
+    if text.startswith("作戦・"):
+        text = text[len("作戦・"):]
+    distances: set[int] = set()
+    styles: set[int] = set()
+    for group in text.split("・"):
+        for part in group.split("/"):
+            part = part.strip()
+            if part in DISTANCE_IDS:
+                distances.add(DISTANCE_IDS[part])
+            if part in STYLE_IDS:
+                styles.add(STYLE_IDS[part])
+    return sorted(distances), sorted(styles)
+
+
+def aptitude_from_conditions(text: str) -> tuple[list[int], list[int]]:
+    """説明文タグがない場合のフォールバック。単一の条件だけを適性とみなす。"""
+    distances = {int(x) for x in re.findall(r"distance_type\s*==\s*(\d+)", text)}
+    styles = {int(x) for x in re.findall(r"running_style\s*==\s*(\d+)", text)}
+    return (
+        sorted(distances) if len(distances) == 1 else [],
+        sorted(styles) if len(styles) == 1 else [],
+    )
+
+
+def aptitude_for(row: dict, skill_type: str) -> tuple[str, str, str]:
+    tags = APT_TAG_RE.findall(row.get("description") or "")
+    if tags:
+        distances, styles = parse_aptitude_tag(tags[0])
+        if distances or styles:
+            return (
+                "/".join(map(str, distances)),
+                "/".join(map(str, styles)),
+                "tag",
+            )
+    if skill_type in APTITUDE_LESS_TYPES:
+        return "", "", ""
+    condition = " ".join(
+        value for value in (row.get("condition"), row.get("precondition")) if value
+    )
+    distances, styles = aptitude_from_conditions(condition)
+    if distances or styles:
+        return (
+            "/".join(map(str, distances)),
+            "/".join(map(str, styles)),
+            "condition",
+        )
+    return "", "", ""
+
+
 def load_rows(con: sqlite3.Connection) -> list[dict]:
     sql = """
         SELECT
@@ -111,6 +178,8 @@ def load_rows(con: sqlite3.Connection) -> list[dict]:
             s.disp_order,
             s.start_date,
             s.end_date,
+            s.condition_1,
+            s.precondition_1,
             n.need_skill_point,
             tn.text AS name,
             td.text AS description
@@ -136,6 +205,8 @@ def load_rows(con: sqlite3.Connection) -> list[dict]:
                 "sp": None if r["need_skill_point"] is None else int(r["need_skill_point"]),
                 "name": clean_text(r["name"]),
                 "description": clean_text(r["description"]),
+                "condition": r["condition_1"] or "",
+                "precondition": r["precondition_1"] or "",
             }
         )
     return rows
@@ -197,6 +268,8 @@ def analyze(rows: list[dict], now: int) -> list[dict]:
         if skill_type == "レア" and 300_000 <= sid < 400_000 and eval_point == 0 and sp is None:
             skill_type = "特殊"
 
+        apt_distance, apt_style, apt_source = aptitude_for(r, skill_type)
+
         out.append(
             {
                 "skill_id": sid,
@@ -220,6 +293,9 @@ def analyze(rows: list[dict], now: int) -> list[dict]:
                 "description": r["description"],
                 "start_date": r["start_date"],
                 "end_date": r["end_date"],
+                "apt_distance": apt_distance,
+                "apt_style": apt_style,
+                "apt_source": apt_source,
                 "_sort": sid,
             }
         )
@@ -249,6 +325,23 @@ def write_js(path: Path, rows: list[dict], meta: dict) -> None:
         f.write("window.SKILL_DATA = ")
         json.dump({"meta": meta, "skills": rows}, f, ensure_ascii=False, separators=(",", ":"))
         f.write(";\n")
+
+
+def update_index_cache_version(index_path: Path, version: str) -> None:
+    """index.html の data/skills.js の ?v= を更新してキャッシュを回避する。"""
+    if not index_path.is_file():
+        return
+    with index_path.open("r", encoding="utf-8", newline="") as f:
+        text = f.read()
+    updated = re.sub(
+        r'(src=["\']data/skills\.js)(?:\?v=[^"\']*)?(["\'])',
+        rf"\1?v={version}\2",
+        text,
+        count=1,
+    )
+    if updated != text:
+        with index_path.open("w", encoding="utf-8", newline="") as f:
+            f.write(updated)
 
 
 def main() -> int:
@@ -291,6 +384,7 @@ def main() -> int:
     write_json(out_dir / "skills.json", rows, meta)
     write_csv(out_dir / "skills_rating.csv", [r for r in rows if r["available"] and r["type"] != "特殊"])
     write_js(Path(args.js), [r for r in rows if r["available"] and r["type"] != "特殊"], meta)
+    update_index_cache_version(Path(args.js).resolve().parent.parent / "index.html", str(now))
 
     # レポート
     by_type = Counter(r["type"] for r in rows if r["available"])

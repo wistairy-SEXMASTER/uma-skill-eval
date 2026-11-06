@@ -132,6 +132,83 @@
   .toggle input { margin: 0; accent-color: var(--accent); }
   .toggle.on { color: var(--text); }
 
+  /* ---------- assessment settings ---------- */
+  .settings-row {
+    display: flex;
+    align-items: center;
+    gap: 8px 12px;
+    flex-wrap: wrap;
+    padding-top: 8px;
+    border-top: 1px dashed var(--line);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .settings-title {
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: .02em;
+  }
+  .setting-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .setting-group > .label { color: var(--muted); }
+  .apt-pair {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+  }
+  .apt-pair .tag {
+    min-width: 1.15em;
+    text-align: center;
+    font-size: 10.5px;
+    color: #9ca3af;
+  }
+  .apt-select {
+    padding: 3px 4px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: #fff;
+    font-size: 11.5px;
+    line-height: 1.3;
+    cursor: pointer;
+  }
+  .apt-select:hover { border-color: #cbd5e1; }
+  .apt-select.apt-good {
+    border-color: #a7f3d0;
+    background: #ecfdf5;
+    color: #047857;
+    font-weight: 600;
+  }
+  .apt-select.apt-mid {
+    border-color: #fde68a;
+    background: #fffbeb;
+    color: #b45309;
+  }
+  .apt-select.apt-bad {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-weight: 600;
+  }
+  .btn.tiny {
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11.5px;
+  }
+  .settings-note {
+    color: #9ca3af;
+    font-size: 11px;
+  }
+  .eval-base {
+    display: block;
+    margin-top: -1px;
+    color: #9ca3af;
+    font-size: 9.5px;
+    line-height: 1.2;
+  }
+
   .badge.hint { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
   .sp-base {
     display: block;
@@ -567,6 +644,8 @@
     .col-sp, td.col-sp { display: none; }
     .col-hint { width: 54px; }
     .hint-select { font-size: 11px; padding: 2px 1px; }
+    .settings-row { gap: 6px 8px; font-size: 11px; }
+    .apt-select { font-size: 11px; padding: 2px 3px; }
     .cart-stats { gap: 9px 12px; }
     .stat .value { font-size: 15px; }
     .stat.hide-sm { display: none; }
@@ -615,6 +694,24 @@
           <label class="toggle" id="onlySelected-wrap"><input type="checkbox" id="onlySelected"> 選択中のみ</label>
         </div>
         <div class="chips" id="typeChips"></div>
+        <div class="settings-row" id="settings">
+          <span class="settings-title">査定設定</span>
+          <label class="toggle" id="fastLearner-wrap" title="切れ者：ヒントLvのSP割引に −10% を加算">
+            <input type="checkbox" id="fastLearner"> 切れ者
+          </label>
+          <span class="setting-group">
+            <span class="label">固有Lv</span>
+            <select id="uniqueLevel" class="apt-select" title="本体固有スキルのレベル（評価点 = Lv × 170）"></select>
+          </span>
+          <span class="setting-group" id="aptDistanceGroup">
+            <span class="label">距離</span>
+          </span>
+          <span class="setting-group" id="aptStyleGroup">
+            <span class="label">脚質</span>
+          </span>
+          <button class="btn tiny" id="btnAptReset" type="button" title="距離・脚質の適性をすべてAに戻す">適性リセット</button>
+          <span class="settings-note" id="settingsNote"></span>
+        </div>
       </div>
   </div>
 
@@ -674,8 +771,12 @@
           <li><b>マイナス系</b>（<code>group_rate = -1</code> または評価点が負）は初期状態では非表示です。必要に応じて「マイナス系を含む」をオンにしてください。</li>
           <li><b>ヒントLv</b>はスキルごとに、一覧の「ヒントLv」列で変更できます。初期値は全スキルLv0（割引なし）です。</li>
           <li>ヒントLvによるSP減少率は <b>Lv1 −10% / Lv2 −20% / Lv3 −30% / Lv4 −35% / Lv5 −40%</b> です。割引後のSPはスキルごとに<b>小数点以下切り捨て</b>で計算します（例: 170SPのLv4 → 110SP）。</li>
+          <li><b>切れ者</b>をオンにすると、ヒントLvの割引に <b>−10%</b> を加算します（例: Lv5＋切れ者 = −50%）。切れ者は全スキルに適用されます。</li>
           <li>上位スキルの「下位込みSP」は、下位スキルそれぞれに設定したヒントLvで割引したSPを合計します。下位スキルのヒントLvを変えると、上位スキルの下位込みSPにも反映されます。</li>
-          <li>スキル適性による評価点倍率、固有スキルのレベル補正、切れ者補正は<b>未適用</b>です。ゲーム内の実際の査定値とは異なります。</li>
+          <li><b>適性倍率</b>は「査定設定」の距離適性・脚質適性から適用します。S/A = <b>×1.1</b>、B/C = <b>×0.9</b>、D/E/F = <b>×0.8</b>、G = <b>×0.7</b> です。芝・ダートは倍率に影響しません。</li>
+          <li>スキル説明の ＜中距離/長距離＞ のように <b>/</b> で区切られた条件は<b>良い方の適性</b>を使い、＜先行・中距離＞ のように <b>・</b> で区切られた条件は<b>両方の倍率を乗算</b>します。初期値はすべてAです。</li>
+          <li><b>固有</b>スキルは「固有Lv × 170」で計算し、適性倍率は適用しません（固有Lvは「査定設定」で1〜6）。<b>継承固有</b>は一律180です。</li>
+          <li><b>進化</b>スキルは通常スキルと同じく適性倍率を適用します。</li>
           <li>特殊スキル（ストーリー・イベント用）と期限切れスキルは収録していません。データは <code>extract_skills.py</code> で再生成できます。</li>
         </ul>
       </div>
@@ -714,7 +815,7 @@
     </div>
   </div>
 
-  <script src="data/skills.js"></script>
+  <script src="data/skills.js?v=1793960723"></script>
   <script>
   (() => {
     'use strict';
@@ -738,7 +839,29 @@
     // ヒントLvごとのSP減少率（ゲーム内仕様）
     const HINT_DISCOUNTS = { 0: 0, 1: 0.10, 2: 0.20, 3: 0.30, 4: 0.35, 5: 0.40 };
     const HINT_KEY = 'uma-skill-eval:hint:v1';
+    const SETTINGS_KEY = 'uma-skill-eval:settings:v1';
+
+    // 適性ランク → 評価点倍率（S/A=1.1, B/C=0.9, D/E/F=0.8, G=0.7）
+    const APT_GRADES = ['S', 'A', 'B', 'C', 'D', 'E', 'F', 'G'];
+    const APT_MULT = { S: 1.1, A: 1.1, B: 0.9, C: 0.9, D: 0.8, E: 0.8, F: 0.8, G: 0.7 };
+    const DISTANCE_META = {
+      1: { short: '短', long: '短距離' },
+      2: { short: 'マ', long: 'マイル' },
+      3: { short: '中', long: '中距離' },
+      4: { short: '長', long: '長距離' },
+    };
+    const STYLE_META = {
+      1: { short: '逃', long: '逃げ' },
+      2: { short: '先', long: '先行' },
+      3: { short: '差', long: '差し' },
+      4: { short: '追', long: '追込' },
+    };
+    const FAST_LEARNER_DISCOUNT = 0.10;
+    const UNIQUE_POINT_PER_LEVEL = 170; // 本体固有スキル: 固有Lv × 170
+    const INHERIT_UNIQUE_POINT = 180;   // 継承固有スキル: 一律180
     const DERIVED_KEYS = {
+      eval_point: '_eval',
+      upgrade_point: '_upgrade_point',
       sp: '_sp',
       total_sp: '_total_sp',
       efficiency: '_efficiency',
@@ -762,7 +885,7 @@
       if (s.group_rate >= 1) {
         for (let rate = 1; rate < s.group_rate; rate++) {
           const lower = REPRESENTATIVE.get(`${s.group_id}:${rate}`);
-          if (lower && lower.sp != null) chain.push(lower);
+          if (lower) chain.push(lower);
         }
       }
       CHAINS.set(s.skill_id, chain);
@@ -782,6 +905,12 @@
       selected: new Set(),
       expanded: new Set(),
       hintLevels: new Map(),
+      fastLearner: false,
+      uniqueLevel: 1,
+      aptitude: {
+        distance: { 1: 'A', 2: 'A', 3: 'A', 4: 'A' },
+        style: { 1: 'A', 2: 'A', 3: 'A', 4: 'A' },
+      },
     };
 
     function escapeHtml(value) {
@@ -858,6 +987,37 @@
       } catch (err) { /* ignore */ }
     }
 
+    // 査定設定（切れ者・固有Lv・適性）を復元
+    function loadSettings() {
+      try {
+        const raw = localStorage.getItem(SETTINGS_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (!saved || typeof saved !== 'object') return;
+        if (typeof saved.fastLearner === 'boolean') state.fastLearner = saved.fastLearner;
+        const level = Number(saved.uniqueLevel);
+        if (Number.isInteger(level) && level >= 1 && level <= 6) state.uniqueLevel = level;
+        for (const cat of ['distance', 'style']) {
+          const src = saved.aptitude && saved.aptitude[cat];
+          if (!src || typeof src !== 'object') continue;
+          for (const id of ['1', '2', '3', '4']) {
+            const grade = String(src[id] || '').toUpperCase();
+            if (APT_MULT[grade] != null) state.aptitude[cat][id] = grade;
+          }
+        }
+      } catch (err) { /* ignore */ }
+    }
+
+    function saveSettings() {
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+          fastLearner: state.fastLearner,
+          uniqueLevel: state.uniqueLevel,
+          aptitude: state.aptitude,
+        }));
+      } catch (err) { /* ignore */ }
+    }
+
     function discountPct(level) {
       return Math.round((HINT_DISCOUNTS[level] || 0) * 100);
     }
@@ -866,29 +1026,99 @@
       return state.hintLevels.get(skillId) || 0;
     }
 
+    // 切れ者はヒント割引に加算（例: Lv5 + 切れ者 = −50%）
+    function spDiscountRate(level) {
+      let rate = HINT_DISCOUNTS[level] || 0;
+      if (state.fastLearner) rate += FAST_LEARNER_DISCOUNT;
+      return Math.min(1, Math.max(0, rate));
+    }
+
     // ゲーム内と同じく、割引後のSPは小数点以下切り捨て
     function applyHintDiscount(sp, level) {
       if (sp == null) return null;
-      const discount = HINT_DISCOUNTS[level] || 0;
-      return Math.max(0, Math.floor(sp * (1 - discount) + 1e-9));
+      return Math.max(0, Math.floor(sp * (1 - spDiscountRate(level)) + 1e-9));
     }
 
-    // ヒントLvを反映したSP・効率を各スキルに持たせる
+    function parseAptList(value) {
+      const parts = Array.isArray(value) ? value : String(value == null ? '' : value).split('/');
+      return parts
+        .map((x) => Number(x))
+        .filter((x) => Number.isInteger(x) && x >= 1 && x <= 4);
+    }
+
+    function aptitudeText(s) {
+      const parts = [];
+      const distances = parseAptList(s.apt_distance);
+      const styles = parseAptList(s.apt_style);
+      if (distances.length) {
+        parts.push('距離 ' + distances.map((id) => DISTANCE_META[id].long).join('/'));
+      }
+      if (styles.length) {
+        parts.push('脚質 ' + styles.map((id) => STYLE_META[id].long).join('/'));
+      }
+      return parts.length ? parts.join('・') : 'なし';
+    }
+
+    // 適性による評価点倍率。固有・継承固有は対象外。
+    function aptitudeFactors(s) {
+      if (s.type === '固有' || s.type === '継承固有') return [];
+      const factors = [];
+      const distances = parseAptList(s.apt_distance);
+      const styles = parseAptList(s.apt_style);
+      if (distances.length) {
+        const mult = Math.max(...distances.map((id) =>
+          APT_MULT[state.aptitude.distance[id] || 'A']));
+        factors.push(mult);
+      }
+      if (styles.length) {
+        const mult = Math.max(...styles.map((id) =>
+          APT_MULT[state.aptitude.style[id] || 'A']));
+        factors.push(mult);
+      }
+      return factors;
+    }
+
+    // uma-tools と同じく単精度で積算し、最後に四捨五入
+    function adjustedEval(s) {
+      if (s.type === '固有') return state.uniqueLevel * UNIQUE_POINT_PER_LEVEL;
+      if (s.type === '継承固有') return INHERIT_UNIQUE_POINT;
+      let value = Math.fround(Number(s.eval_point) || 0);
+      for (const factor of aptitudeFactors(s)) {
+        value = Math.fround(value * Math.fround(factor));
+      }
+      return Math.round(value);
+    }
+
+    // ヒントLv・切れ者・適性を反映した評価点/SP/効率を各スキルに持たせる
     function recomputeDerived() {
+      // 1周目: 適性倍率を反映した評価点（下位スキル参照より先に全件計算）
+      for (const s of SKILLS) {
+        const factors = aptitudeFactors(s);
+        s._apt_factor = factors.reduce((acc, factor) => acc * factor, 1);
+        s._eval = adjustedEval(s);
+      }
+
+      // 2周目: SP割引・下位スキル連鎖・効率
       for (const s of SKILLS) {
         const hint = effectiveHint(s.skill_id);
         const sp = applyHintDiscount(s.sp, hint);
         let prereqSp = 0;
+        let prereqEval = 0;
         for (const lower of CHAINS.get(s.skill_id) || []) {
-          prereqSp += applyHintDiscount(lower.sp, effectiveHint(lower.skill_id)) || 0;
+          if (lower.sp != null) {
+            prereqSp += applyHintDiscount(lower.sp, effectiveHint(lower.skill_id)) || 0;
+          }
+          prereqEval = Math.max(prereqEval, lower._eval);
         }
         const totalSp = s.sp == null ? null : sp + prereqSp;
         s._hint = hint;
         s._sp = sp;
         s._total_sp = totalSp;
         s._prereq_sp = s.sp == null ? 0 : prereqSp;
-        s._efficiency = sp != null && sp > 0 ? s.upgrade_point / sp : null;
-        s._total_efficiency = totalSp != null && totalSp > 0 ? s.eval_point / totalSp : null;
+        s._prereq_eval = prereqEval;
+        s._upgrade_point = s._eval - prereqEval;
+        s._efficiency = sp != null && sp > 0 ? s._upgrade_point / sp : null;
+        s._total_efficiency = totalSp != null && totalSp > 0 ? s._eval / totalSp : null;
       }
     }
 
@@ -948,6 +1178,75 @@
       }
     }
 
+    function aptClass(grade) {
+      if (grade === 'S' || grade === 'A') return 'apt-good';
+      if (grade === 'B' || grade === 'C') return 'apt-mid';
+      return 'apt-bad';
+    }
+
+    function renderSettings() {
+      const levelSel = $('uniqueLevel');
+      if (levelSel) {
+        if (levelSel.options.length !== 6) {
+          levelSel.innerHTML = [1, 2, 3, 4, 5, 6].map((lv) =>
+            `<option value="${lv}">${lv}</option>`
+          ).join('');
+        }
+        levelSel.value = String(state.uniqueLevel);
+      }
+
+      const fast = $('fastLearner');
+      if (fast) fast.checked = state.fastLearner;
+      $('fastLearner-wrap')?.classList.toggle('on', state.fastLearner);
+
+      const groups = [
+        ['aptDistanceGroup', 'distance', DISTANCE_META],
+        ['aptStyleGroup', 'style', STYLE_META],
+      ];
+      for (const [groupId, cat, meta] of groups) {
+        const group = $(groupId);
+        if (!group) continue;
+        if (group.querySelectorAll('.apt-pair').length !== 4) {
+          group.querySelectorAll('.apt-pair').forEach((el) => el.remove());
+          for (const id of [1, 2, 3, 4]) {
+            const pair = document.createElement('span');
+            pair.className = 'apt-pair';
+            const tag = document.createElement('span');
+            tag.className = 'tag';
+            tag.textContent = meta[id].short;
+            tag.title = meta[id].long;
+            const sel = document.createElement('select');
+            sel.className = 'apt-select';
+            sel.dataset.aptCat = cat;
+            sel.dataset.aptId = String(id);
+            sel.setAttribute('aria-label', `${meta[id].long}の適性`);
+            sel.innerHTML = APT_GRADES.map((g) =>
+              `<option value="${g}">${g}</option>`
+            ).join('');
+            pair.append(tag, sel);
+            group.appendChild(pair);
+          }
+        }
+        for (const id of [1, 2, 3, 4]) {
+          const sel = group.querySelector(
+            `select[data-apt-cat="${cat}"][data-apt-id="${id}"]`
+          );
+          if (!sel) continue;
+          const grade = state.aptitude[cat][id];
+          sel.value = grade;
+          sel.className = `apt-select ${aptClass(grade)}`;
+          sel.title = `${meta[id].long}適性: ${grade}（×${APT_MULT[grade].toFixed(1)}）`;
+        }
+      }
+
+      const note = $('settingsNote');
+      if (note) {
+        note.textContent =
+          `固有 ${formatNumber(state.uniqueLevel * UNIQUE_POINT_PER_LEVEL)}点` +
+          (state.fastLearner ? ' / 切れ者 −10%' : '');
+      }
+    }
+
     function filteredSkills() {
       const terms = normalize(state.query).split(/\s+/).filter(Boolean);
       const out = [];
@@ -986,7 +1285,7 @@
         else if (av == null) r = 1;
         else if (bv == null) r = -1;
         else r = dir === 'asc' ? av - bv : bv - av;
-        if (r === 0) r = b.eval_point - a.eval_point;
+        if (r === 0) r = b._eval - a._eval;
         if (r === 0) r = a.skill_id - b.skill_id;
       }
       if (dir === 'desc' && (key === 'name' || key === 'type')) r = -r;
@@ -1003,7 +1302,7 @@
           continue;
         }
         if (s.group_rate > cur.group_rate ||
-            (s.group_rate === cur.group_rate && s.eval_point > cur.eval_point)) {
+            (s.group_rate === cur.group_rate && s._eval > cur._eval)) {
           groups.set(s.group_id, s);
         }
       }
@@ -1014,9 +1313,9 @@
       let spBaseTotal = 0;
       let evalNoSp = 0;
       for (const s of counted) {
-        evalTotal += Number(s.eval_point) || 0;
+        evalTotal += Number(s._eval) || 0;
         if (s._total_sp != null) spTotal += Number(s._total_sp) || 0;
-        else evalNoSp += Number(s.eval_point) || 0;
+        else evalNoSp += Number(s._eval) || 0;
         if (s.total_sp != null) spBaseTotal += Number(s.total_sp) || 0;
       }
       const overridden = selected.filter((s) => !countedSet.has(s.skill_id));
@@ -1048,12 +1347,17 @@
       }
       const note = $('cartNote');
       const hintCount = sum.counted.filter((s) => s._hint > 0).length;
-      const hintText = hintCount
-        ? `選択中 ${formatNumber(hintCount)} 件にヒントLv設定を適用中。`
+      const settingBits = [];
+      if (hintCount) settingBits.push(`ヒントLv ${formatNumber(hintCount)}件`);
+      if (state.fastLearner) settingBits.push('切れ者');
+      const settingText = settingBits.length
+        ? `選択中に ${settingBits.join(' / ')} のSP割引を適用中。`
         : '';
-      const savedText = hintText && sum.spBaseTotal > sum.spTotal
+      const savedText = settingText && sum.spBaseTotal > sum.spTotal
         ? ` 割引前 ${formatNumber(sum.spBaseTotal)} SP → ${formatNumber(sum.spTotal)} SP。`
         : '';
+      const aptCount = sum.counted.filter((s) => s._apt_factor !== 1).length;
+      const aptText = aptCount ? ` 適性倍率を ${formatNumber(aptCount)} 件に適用。` : '';
       if (!sum.selected.length) {
         note.innerHTML = 'スキルを選択すると、合計評価点・合計SP・総合効率を計算します。';
       } else if (sum.overridden.length) {
@@ -1061,12 +1365,12 @@
           `<span class="warn">同一グループの下位 ${formatNumber(sum.overridden.length)} 件は集計外</span>` +
           `（集計対象 ${formatNumber(sum.counted.length)} 件）。` +
           `上位スキルを選択すると、下位スキルのSPを含めて計算されます。` +
-          escapeHtml(hintText + savedText);
+          escapeHtml(settingText + aptText + savedText);
       } else {
         note.textContent =
           `選択 ${formatNumber(sum.selected.length)} 件を集計。` +
           (sum.evalNoSp ? ` SP対象外の評価点 ${formatNumber(sum.evalNoSp)} を含みます。` : '') +
-          hintText + savedText;
+          settingText + aptText + savedText;
       }
       $('btnClear').disabled = sum.selected.length === 0;
       $('btnCsv').disabled = sum.counted.length === 0;
@@ -1089,8 +1393,8 @@
         `<option value="${lv}"${hint === lv ? ' selected' : ''}>Lv${lv}</option>`
       ).join('');
       const title = hint > 0
-        ? `ヒントLv${hint}（−${discountPct(hint)}%）`
-        : 'ヒントLv0（割引なし）';
+        ? `ヒントLv${hint}（−${discountPct(hint)}%）${state.fastLearner ? '＋切れ者' : ''}`
+        : (state.fastLearner ? '切れ者（−10%）' : 'ヒントLv0（割引なし）');
       return `<select class="hint-select${hint > 0 ? ' on' : ''}" data-hint-id="${s.skill_id}" ` +
         `title="${title}" aria-label="${escapeHtml(s.name)} のヒントLv">${options}</select>`;
     }
@@ -1103,7 +1407,7 @@
       const badges = [typeBadge(s.type)];
       if (s.group_rate < 0) {
         badges.push('<span class="badge minus">マイナス</span>');
-      } else if (s.prereq_eval > 0 || s.prereq_sp > 0) {
+      } else if (s._prereq_eval > 0 || s.prereq_sp > 0) {
         badges.push('<span class="badge chain">上位</span>');
       }
       if (s.total_sp == null) {
@@ -1117,28 +1421,43 @@
         `${open ? '詳細を閉じる' : '詳細'}</button>`
       );
 
+      const spDiscounted = s.sp != null && s._sp !== s.sp;
       const sp = s.sp == null
         ? '<span class="na">—</span>'
-        : (s._hint > 0
+        : (spDiscounted
             ? `${formatNumber(s._sp)}<span class="sp-base">${formatNumber(s.sp)}</span>`
             : formatNumber(s.sp));
       const spTitle = s.sp == null
         ? 'SP対象外'
-        : (s._hint > 0
-            ? `ヒントLv${s._hint}（−${discountPct(s._hint)}%）: ${formatNumber(s.sp)} → ${formatNumber(s._sp)} SP`
+        : (spDiscounted
+            ? `ヒントLv${s._hint}${state.fastLearner ? '＋切れ者' : ''}` +
+              `（−${Math.round(spDiscountRate(s._hint) * 100)}%）: ` +
+              `${formatNumber(s.sp)} → ${formatNumber(s._sp)} SP`
             : `${formatNumber(s.sp)} SP`);
-      const upgrade = s.upgrade_point == null ? '<span class="na">—</span>' : formatNumber(s.upgrade_point);
+      const evalShowsBase = s.type !== '固有' && s.type !== '継承固有' && s._apt_factor !== 1;
+      const evalTitle = s.type === '固有'
+        ? `固有Lv${state.uniqueLevel} × ${UNIQUE_POINT_PER_LEVEL} = ${formatNumber(s._eval)}`
+        : s.type === '継承固有'
+          ? `継承固有は一律 ${INHERIT_UNIQUE_POINT}`
+          : (s._apt_factor !== 1
+              ? `基礎 ${formatNumber(s.eval_point)} × 適性 ${s._apt_factor.toFixed(2)} = ${formatNumber(s._eval)}`
+              : `${formatNumber(s.eval_point)}`);
+      const evalDisplay = evalShowsBase
+        ? `${formatNumber(s._eval)}<span class="eval-base">${formatNumber(s.eval_point)}</span>`
+        : formatNumber(s._eval);
+      const upgrade = s._upgrade_point == null ? '<span class="na">—</span>' : formatNumber(s._upgrade_point);
       const effort = s._efficiency == null ? '<span class="na">—</span>' : s._efficiency.toFixed(2);
       const totalSp = s._total_sp == null
         ? '<span class="na">—</span>'
         : formatNumber(s._total_sp);
       const totalEffort = s._total_efficiency == null ? '<span class="na">—</span>' : s._total_efficiency.toFixed(2);
+      const totalDiscounted = s.total_sp != null && s._total_sp !== s.total_sp;
       const totalSpTitle = s.total_sp == null
         ? 'SP対象外'
-        : (s.prereq_sp > 0
+        : (s._prereq_sp > 0
             ? `下位込み（内訳: 下位 ${formatNumber(s._prereq_sp)} + このスキル ${formatNumber(s._sp || 0)}）` +
-              (s._hint > 0 ? ` / 割引前 ${formatNumber(s.total_sp)}` : '')
-            : `${formatNumber(s._total_sp)}` + (s._hint > 0 ? ` / 割引前 ${formatNumber(s.total_sp)}` : ''));
+              (totalDiscounted ? ` / 割引前 ${formatNumber(s.total_sp)}` : '')
+            : `${formatNumber(s._total_sp)}` + (totalDiscounted ? ` / 割引前 ${formatNumber(s.total_sp)}` : ''));
       const desc = s._descOneLine ? escapeHtml(s._descOneLine) : '<span class="na">説明なし</span>';
       const descShort = s._descOneLine
         ? (s._descOneLine.length > 56 ? escapeHtml(s._descOneLine.slice(0, 56)) + '…' : escapeHtml(s._descOneLine))
@@ -1152,7 +1471,7 @@
             `<div class="skill-name">${escapeHtml(s.name)}</div>` +
             `<div class="skill-sub">${badges.join('')}</div>` +
           `</td>` +
-          `<td class="num col-eval${s.eval_point < 0 ? ' neg' : ''}">${formatNumber(s.eval_point)}</td>` +
+          `<td class="num col-eval${s._eval < 0 ? ' neg' : ''}" title="${escapeHtml(evalTitle)}">${evalDisplay}</td>` +
           `<td class="col-hint">${hintSelectHtml(s)}</td>` +
           `<td class="num col-sp" title="${escapeHtml(spTitle)}">${sp}</td>` +
           `<td class="num col-upgrade">${upgrade}</td>` +
@@ -1168,9 +1487,20 @@
           : '<span class="na">説明なし</span>';
         const discountedSp = s._sp == null ? '' : formatNumber(s._sp);
         const discountedTotal = s._total_sp == null ? '' : formatNumber(s._total_sp);
-        const hintNote = s.sp != null && s._hint > 0
-          ? `（元 ${formatNumber(s.sp)} / −${discountPct(s._hint)}%）`
+        const spDiscounted = s.sp != null && s._sp !== s.sp;
+        const hintNote = spDiscounted
+          ? `（元 ${formatNumber(s.sp)} / −${Math.round(spDiscountRate(s._hint) * 100)}%` +
+            `${state.fastLearner ? '・切れ者込み' : ''}）`
           : '';
+        const uniqueNote = s.type === '固有'
+          ? `<span>固有Lv <b>${state.uniqueLevel}</b>（${state.uniqueLevel} × ${UNIQUE_POINT_PER_LEVEL}）</span>`
+          : (s.type === '継承固有'
+              ? `<span>継承固有 <b>一律 ${INHERIT_UNIQUE_POINT}</b></span>`
+              : '');
+        const aptNote = s.type === '固有' || s.type === '継承固有'
+          ? ''
+          : `<span>適性条件 <b>${escapeHtml(aptitudeText(s))}</b>` +
+            `${s._apt_factor !== 1 ? `（×${s._apt_factor.toFixed(2)}）` : ''}</span>`;
         rows.push(
           `<tr class="detail-row"><td colspan="10">` +
             `<div class="detail-desc">${fullDesc}</div>` +
@@ -1178,12 +1508,15 @@
               `<span>ID <b>${s.skill_id}</b></span>` +
               `<span>グループ <b>${s.group_id}</b>（rate ${s.group_rate}）</span>` +
               `<span>カテゴリ <b>${escapeHtml(s.category_label)}</b></span>` +
+              uniqueNote +
+              aptNote +
               `<span>ヒントLv <b>${s._hint}</b>${s._hint > 0 ? `（−${discountPct(s._hint)}%）` : '（割引なし）'}</span>` +
+              `<span>評価点 <b>${formatNumber(s._eval)}</b>${s._eval !== s.eval_point ? `（基礎 ${formatNumber(s.eval_point)}）` : ''}</span>` +
               `<span>割引後SP <b>${discountedSp || '—'}</b>${hintNote}</span>` +
               `<span>下位込み割引後SP <b>${discountedTotal || '—'}</b></span>` +
-              `<span>下位評価点 <b>${formatNumber(s.prereq_eval)}</b></span>` +
+              `<span>下位評価点 <b>${formatNumber(s._prereq_eval)}</b></span>` +
               `<span>下位SP（割引前） <b>${formatNumber(s.prereq_sp)}</b></span>` +
-              `<span>上昇評価点 <b>${formatNumber(s.upgrade_point)}</b></span>` +
+              `<span>上昇評価点 <b>${formatNumber(s._upgrade_point)}</b></span>` +
             `</div>` +
           `</td></tr>`
         );
@@ -1301,7 +1634,9 @@
         a.group_id - b.group_id || a.group_rate - b.group_rate || a.skill_id - b.skill_id
       );
       const header = [
-        'skill_id', 'name', 'type', 'rarity', 'eval_point',
+        'skill_id', 'name', 'type', 'rarity',
+        'eval_base', 'eval_point', 'aptitude_distance', 'aptitude_style', 'aptitude_multiplier',
+        'unique_level', 'fast_learner',
         'sp_base', 'hint_level', 'sp',
         'upgrade_point', 'efficiency',
         'total_sp_base', 'total_sp', 'total_efficiency',
@@ -1312,15 +1647,22 @@
       for (const s of rows) {
         const out = {
           ...s,
+          eval_base: s.eval_point,
+          eval_point: s._eval,
+          aptitude_multiplier: Math.round(s._apt_factor * 1000) / 1000,
+          unique_level: state.uniqueLevel,
+          fast_learner: state.fastLearner ? 1 : 0,
           sp_base: s.sp,
           hint_level: s._hint,
           sp: s._sp,
+          upgrade_point: s._upgrade_point,
           efficiency: s._efficiency == null ? null : Math.round(s._efficiency * 1000) / 1000,
           total_sp_base: s.total_sp,
           total_sp: s._total_sp,
           total_efficiency: s._total_efficiency == null ? null : Math.round(s._total_efficiency * 1000) / 1000,
           prereq_sp_base: s.prereq_sp,
           prereq_sp: s._prereq_sp,
+          prereq_eval: s._prereq_eval,
         };
         lines.push(header.map((k) => csvCell(out[k])).join(','));
       }
@@ -1366,6 +1708,39 @@
         state.sortKey = key;
         state.sortDir = dir;
         state.page = 1;
+        render();
+      });
+
+      $('settings').addEventListener('change', (e) => {
+        const target = e.target;
+        if (target.id === 'fastLearner') {
+          state.fastLearner = target.checked;
+        } else if (target.id === 'uniqueLevel') {
+          const level = Number(target.value);
+          state.uniqueLevel = Number.isInteger(level) && level >= 1 && level <= 6 ? level : 1;
+        } else if (target.matches('select[data-apt-cat]')) {
+          const cat = target.dataset.aptCat;
+          const id = target.dataset.aptId;
+          const grade = String(target.value).toUpperCase();
+          if (state.aptitude[cat] && APT_MULT[grade] != null) {
+            state.aptitude[cat][id] = grade;
+          }
+        } else {
+          return;
+        }
+        saveSettings();
+        renderSettings();
+        recomputeDerived();
+        render();
+      });
+
+      $('btnAptReset').addEventListener('click', () => {
+        for (const cat of ['distance', 'style']) {
+          for (const id of [1, 2, 3, 4]) state.aptitude[cat][id] = 'A';
+        }
+        saveSettings();
+        renderSettings();
+        recomputeDerived();
         render();
       });
 
@@ -1484,7 +1859,9 @@
       initMeta();
       initCategory();
       renderTypeChips();
+      loadSettings();
       recomputeDerived();
+      renderSettings();
       bind();
       updateStickyOffset();
       render();
