@@ -45,6 +45,40 @@ CATEGORY_LABELS = {
     101: "イベント",
 }
 
+# ability_type_1_1（効果の種類）→ 効果カテゴリ。
+# ゲーム内の効果は ability_type_1_1 が主効果、1_2 / 1_3 が追加効果。
+EFFECT_TYPE_LABELS = {
+    1: "緑",       # 右回り・左回りなど（スピード系の緑スキル）
+    2: "緑",       # レース場など（スタミナ系の緑スキル）
+    3: "緑",       # バ場など（パワー系の緑スキル）
+    4: "緑",       # 天候など（根性系の緑スキル）
+    5: "緑",       # 枠・作戦のコツなど（賢さ系の緑スキル）
+    6: "特殊",     # 大逃げ
+    8: "視野",     # 視野・観察力
+    9: "回復",     # 体力回復
+    10: "ゲート",  # スタート・出遅れ
+    13: "デバフ",  # 駆け引き（相手の掛かり）
+    14: "デバフ",  # 動揺・掛かり
+    21: "デバフ",  # 速度ダウン・ためらい
+    22: "速度",    # 現在速度アップ
+    27: "速度",    # 目標速度アップ
+    28: "位置取り",  # コース取り・ポジション
+    29: "デバフ",  # やる気ダウン
+    31: "加速",    # 加速度アップ
+    32: "緑",      # 基礎能力アップ
+    48: "速度",    # 伸び・速度
+    501: "特殊",   # カーニバルボーナス
+    502: "特殊",   # カーニバルボーナス
+}
+
+
+def effect_category(*ability_types: int) -> str:
+    """ability_type の並びから主効果カテゴリを決める。"""
+    for ability_type in ability_types:
+        if ability_type and ability_type in EFFECT_TYPE_LABELS:
+            return EFFECT_TYPE_LABELS[ability_type]
+    return "その他"
+
 FIELDS = [
     "skill_id",
     "name",
@@ -62,6 +96,7 @@ FIELDS = [
     "prereq_eval",
     "category",
     "category_label",
+    "effect_category",
     "purchasable",
     "available",
     "description",
@@ -195,6 +230,9 @@ def load_rows(con: sqlite3.Connection) -> list[dict]:
             s.end_date,
             s.condition_1,
             s.precondition_1,
+            s.ability_type_1_1,
+            s.ability_type_1_2,
+            s.ability_type_1_3,
             n.need_skill_point,
             tn.text AS name,
             td.text AS description
@@ -222,6 +260,11 @@ def load_rows(con: sqlite3.Connection) -> list[dict]:
                 "description": clean_text(r["description"]),
                 "condition": r["condition_1"] or "",
                 "precondition": r["precondition_1"] or "",
+                "ability_types": [
+                    int(r["ability_type_1_1"] or 0),
+                    int(r["ability_type_1_2"] or 0),
+                    int(r["ability_type_1_3"] or 0),
+                ],
             }
         )
     return rows
@@ -300,6 +343,111 @@ def load_cards(con: sqlite3.Connection) -> list[dict]:
     return cards
 
 
+def load_scenarios(con: sqlite3.Connection) -> list[dict]:
+    """育成シナリオ一覧。名前は text_data category=119。"""
+    sql = """
+        SELECT sc.id, sc.sort_id, tn.text AS name
+        FROM single_mode_scenario AS sc
+        LEFT JOIN text_data AS tn ON tn.category = 119 AND tn."index" = sc.id
+        ORDER BY sc.sort_id, sc.id
+    """
+    out = []
+    for r in con.execute(sql):
+        out.append(
+            {
+                "id": int(r["id"]),
+                "sort_id": int(r["sort_id"] or 0),
+                "name": clean_text(r["name"]) or f"シナリオ {r['id']}",
+            }
+        )
+    return out
+
+
+def load_card_initial_skills(con: sqlite3.Connection) -> dict[int, list[int]]:
+    """カードが最初から取得できるスキル（available_skill_set）。"""
+    sql = """
+        SELECT c.id AS card_id, a.skill_id, a.need_rank
+        FROM card_data AS c
+        JOIN available_skill_set AS a
+            ON a.available_skill_set_id = c.available_skill_set_id
+        ORDER BY c.id, a.need_rank, a.skill_id
+    """
+    out: dict[int, list[int]] = defaultdict(list)
+    for r in con.execute(sql):
+        card_id = int(r["card_id"])
+        skill_id = int(r["skill_id"])
+        if skill_id and skill_id not in out[card_id]:
+            out[card_id].append(skill_id)
+    return dict(out)
+
+
+def load_card_unique_evolutions(con: sqlite3.Connection) -> dict[int, list[dict]]:
+    """カード固有スキルの進化（skill_upgrade_description）。
+
+    基礎スキルは card_rarity_data.skill_set → skill_set.skill_id1。
+    """
+    base_by_card: dict[int, int] = {}
+    for r in con.execute("""
+        SELECT r.card_id, ss.skill_id1
+        FROM card_rarity_data AS r
+        JOIN skill_set AS ss ON ss.id = r.skill_set
+        WHERE ss.skill_id1 > 0
+        ORDER BY r.card_id, r.rarity
+    """):
+        base_by_card.setdefault(int(r["card_id"]), int(r["skill_id1"]))
+
+    out: dict[int, list[dict]] = defaultdict(list)
+    for r in con.execute("""
+        SELECT card_id, rank, skill_id
+        FROM skill_upgrade_description
+        ORDER BY card_id, rank, skill_id
+    """):
+        card_id = int(r["card_id"])
+        base_skill_id = base_by_card.get(card_id, 0)
+        out[card_id].append(
+            {
+                "base_skill_id": base_skill_id,
+                "skill_id": int(r["skill_id"]),
+                "rank": int(r["rank"] or 0),
+            }
+        )
+    return dict(out)
+
+
+def load_card_succession_evolutions(con: sqlite3.Connection) -> dict[int, list[dict]]:
+    """カード固有の継承スキル進化（skill_upgrade_succession_skill）。"""
+    out: dict[int, list[dict]] = defaultdict(list)
+    for r in con.execute("""
+        SELECT card_id, base_skill_id, skill_id
+        FROM skill_upgrade_succession_skill
+        ORDER BY card_id, id
+    """):
+        out[int(r["card_id"])].append(
+            {
+                "base_skill_id": int(r["base_skill_id"]),
+                "skill_id": int(r["skill_id"]),
+            }
+        )
+    return dict(out)
+
+
+def load_scenario_evolutions(con: sqlite3.Connection) -> dict[int, list[dict]]:
+    """シナリオごとの進化スキル（skill_upgrade_speciality）。"""
+    out: dict[int, list[dict]] = defaultdict(list)
+    for r in con.execute("""
+        SELECT scenario_id, base_skill_id, skill_id
+        FROM skill_upgrade_speciality
+        ORDER BY scenario_id, id
+    """):
+        out[int(r["scenario_id"])].append(
+            {
+                "base_skill_id": int(r["base_skill_id"]),
+                "skill_id": int(r["skill_id"]),
+            }
+        )
+    return dict(out)
+
+
 def build_groups(rows: list[dict]) -> dict[int, list[dict]]:
     groups: dict[int, list[dict]] = defaultdict(list)
     for r in rows:
@@ -376,6 +524,7 @@ def analyze(rows: list[dict], now: int) -> list[dict]:
                 "prereq_eval": prereq_eval if chain else 0,
                 "category": r["category"],
                 "category_label": CATEGORY_LABELS.get(r["category"], str(r["category"])),
+                "effect_category": effect_category(*r["ability_types"]),
                 "purchasable": purchasable,
                 "available": available,
                 "description": r["description"],
@@ -407,13 +556,32 @@ def write_json(path: Path, rows: list[dict], meta: dict) -> None:
         json.dump(payload, f, ensure_ascii=False, indent=1)
 
 
-def write_js(path: Path, rows: list[dict], meta: dict, cards: list[dict]) -> None:
+def write_js(
+    path: Path,
+    rows: list[dict],
+    meta: dict,
+    cards: list[dict],
+    scenarios: list[dict],
+    card_initial_skills: dict[int, list[int]],
+    card_unique_evolutions: dict[int, list[dict]],
+    card_succession_evolutions: dict[int, list[dict]],
+    scenario_evolutions: dict[int, list[dict]],
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     # index.html から <script src="data/skills.js"> で読み込む
     with path.open("w", encoding="utf-8") as f:
         f.write("window.SKILL_DATA = ")
         json.dump(
-            {"meta": meta, "skills": rows, "cards": cards},
+            {
+                "meta": meta,
+                "skills": rows,
+                "cards": cards,
+                "scenarios": scenarios,
+                "cardInitialSkills": card_initial_skills,
+                "cardUniqueEvolutions": card_unique_evolutions,
+                "cardSuccessionEvolutions": card_succession_evolutions,
+                "scenarioEvolutions": scenario_evolutions,
+            },
             f,
             ensure_ascii=False,
             separators=(",", ":"),
@@ -493,6 +661,11 @@ def main() -> int:
     con = connect(db_path)
     raw = load_rows(con)
     cards = load_cards(con)
+    scenarios = load_scenarios(con)
+    card_initial_skills = load_card_initial_skills(con)
+    card_unique_evolutions = load_card_unique_evolutions(con)
+    card_succession_evolutions = load_card_succession_evolutions(con)
+    scenario_evolutions = load_scenario_evolutions(con)
     con.close()
 
     if not raw:
@@ -507,6 +680,7 @@ def main() -> int:
         "generated_at": datetime.fromtimestamp(now).isoformat(timespec="seconds"),
         "total": len(rows),
         "cards": len(cards),
+        "scenarios": len(scenarios),
         "note": "eval_point=grade_value, sp=need_skill_point, upgrade_point=下位スキルからの上昇分, total_sp=下位込みSP",
     }
 
@@ -523,6 +697,11 @@ def main() -> int:
         [r for r in rows if r["available"] and r["type"] != "特殊"],
         meta,
         cards,
+        scenarios,
+        card_initial_skills,
+        card_unique_evolutions,
+        card_succession_evolutions,
+        scenario_evolutions,
     )
     update_index_cache_version(Path(args.js).resolve().parent.parent / "index.html", str(now))
     font_path = Path(args.js).resolve().parent.parent / "assets" / "umamusume-font.ttf"

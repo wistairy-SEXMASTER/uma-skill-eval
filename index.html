@@ -224,6 +224,40 @@
     color: #6b7280;
     font-size: 11.5px;
   }
+  .card-evolution {
+    display: none;
+    margin-top: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #f8fafc;
+    font-size: 12px;
+  }
+  .card-evolution.show { display: block; }
+  .evo-section + .evo-section { margin-top: 10px; }
+  .evo-section-title {
+    margin-bottom: 4px;
+    font-weight: 600;
+    color: #475569;
+    font-size: 11.5px;
+  }
+  .evo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .evo-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .evo-base { color: #64748b; }
+  .evo-arrow { color: #94a3b8; }
+  .evo-skill { color: #1d4ed8; font-weight: 600; }
+  .evo-meta { color: #94a3b8; font-size: 10.5px; }
+  .evo-empty { color: #94a3b8; font-size: 11.5px; }
+  .evo-btn { flex: 0 0 auto; }
   .filter-group {
     display: inline-flex;
     align-items: center;
@@ -625,6 +659,16 @@
   .badge.minus { background: #fef2f2; color: var(--red); }
   .badge.overridden { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
   .badge.nosp { background: #f8fafc; color: #64748b; border-color: #e2e8f0; }
+  .effect-speed { background: #eff6ff; color: #1d4ed8; }
+  .effect-accel { background: #ecfdf5; color: #047857; }
+  .effect-heal { background: #fdf2f8; color: #be185d; }
+  .effect-green { background: #f0fdfa; color: #0f766e; }
+  .effect-debuff { background: #fef2f2; color: #b91c1c; }
+  .effect-position { background: #f5f3ff; color: #6d28d9; }
+  .effect-sight { background: #fff7ed; color: #c2410c; }
+  .effect-gate { background: #fffbeb; color: #b45309; }
+  .effect-special { background: #f0fdf4; color: #15803d; }
+  .effect-other { background: #f9fafb; color: #6b7280; }
 
   .na { color: #c3c7ce; }
   .neg { color: var(--red); }
@@ -913,11 +957,23 @@
           <label class="toggle" id="onlySelected-wrap"><input type="checkbox" id="onlySelected"> 選択中のみ</label>
         </div>
         <div class="chips" id="typeChips"></div>
+        <div class="settings-row" id="effectRow">
+          <span class="settings-title">効果</span>
+          <div class="chips" id="effectChips"></div>
+        </div>
         <div class="settings-row" id="cardRow">
           <span class="settings-title">ウマ娘</span>
           <select id="cardSelect" class="card-select" title="ウマ娘を選択すると距離・脚質の初期適性を自動設定"></select>
           <button class="btn tiny" id="btnCardAptReset" type="button" disabled>初期適性に戻す</button>
           <span class="card-info" id="cardInfo"></span>
+        </div>
+        <div class="card-evolution" id="cardEvolution"></div>
+        <div class="settings-row" id="scenarioRow">
+          <span class="settings-title">進化スキル</span>
+          <label class="opt-field">シナリオ
+            <select id="scenarioSelect" class="card-select" title="シナリオを選ぶと、そのシナリオで選択可能な進化スキルだけを表示します"></select>
+          </label>
+          <span class="settings-note" id="scenarioNote"></span>
         </div>
         <div class="settings-row sub-row" id="settings">
           <span class="settings-title">査定設定</span>
@@ -935,6 +991,7 @@
             <span class="label">脚質</span>
           </span>
           <button class="btn tiny" id="btnAptReset" type="button" title="距離・脚質の適性をすべてAに戻す">適性リセット</button>
+          <button class="btn tiny" id="btnHintReset" type="button" title="すべてのスキルのヒントLvを0に戻します">ヒントLvリセット</button>
           <span class="settings-note" id="settingsNote"></span>
         </div>
         <div class="settings-row" id="aptFilter">
@@ -1060,7 +1117,7 @@
           <li>同じグループのスキルを複数選択した場合、<b>最も上位（<code>group_rate</code> が最大）の1つだけ</b>を合計に加算します。下位スキルは「集計外」と表示されます。</li>
           <li><b>固有</b>・<b>進化</b>はSPでは取得できませんが、評価点は合計に加算されます（合計SPには含まれません）。</li>
           <li><b>マイナス系</b>（<code>group_rate = -1</code> または評価点が負）は初期状態では非表示です。必要に応じて「マイナス系を含む」をオンにしてください。</li>
-          <li><b>ヒントLv</b>はスキルごとに、一覧の「ヒントLv」列で変更できます。初期値は全スキルLv0（割引なし）です。</li>
+          <li><b>ヒントLv</b>はスキルごとに、一覧の「ヒントLv」列で変更できます。初期値は全スキルLv0（割引なし）です。「<b>ヒントLvリセット</b>」で全スキルのヒントLvを0に戻せます。</li>
           <li>ヒントLvによるSP減少率は <b>Lv1 −10% / Lv2 −20% / Lv3 −30% / Lv4 −35% / Lv5 −40%</b> です。割引後のSPはスキルごとに<b>小数点以下切り捨て</b>で計算します（例: 170SPのLv4 → 110SP）。</li>
           <li><b>切れ者</b>をオンにすると、ヒントLvの割引に <b>−10%</b> を加算します（例: Lv5＋切れ者 = −50%）。切れ者は全スキルに適用されます。</li>
           <li>上位スキルの「下位込みSP」は、下位スキルそれぞれに設定したヒントLvで割引したSPを合計します。下位スキルのヒントLvを変えると、上位スキルの下位込みSPにも反映されます。</li>
@@ -1070,6 +1127,9 @@
           <li><b>進化</b>スキルは通常スキルと同じく適性倍率を適用します。</li>
           <li><b>ウマ娘</b>を選ぶと、そのカードの距離適性・脚質適性を「査定設定」に自動反映します。芝・ダート適性は表示のみで、評価点倍率には影響しません。「初期適性に戻す」で再適用できます。</li>
           <li><b>適性フィルタ</b>は距離・馬場・脚質のチップで絞り込みます。スキルの適性条件のうち<b>いずれか1つでも一致</b>すれば表示します（例: ＜短距離・芝＞ は短距離または芝のどちらかで表示）。「汎用を含む」をオフにすると、適性条件のないスキルを除外します。</li>
+          <li><b>効果カテゴリ</b>は「速度」「加速」「回復」「緑」「デバフ」「位置取り」「視野」「ゲート」などのチップで絞り込みます。主効果（<code>ability_type_1_1</code>）で分類し、複数効果があるスキルは最初の効果を使います。</li>
+          <li><b>シナリオ</b>を選ぶと、そのシナリオで選択可能な<b>進化スキル</b>だけを一覧に表示します。カード固有の進化スキルは、ウマ娘を選択している場合にあわせて表示します。</li>
+          <li><b>ウマ娘</b>を選ぶと、そのカードが最初から持っている<b>金スキル</b>に対応する進化スキルを表示します。シナリオ未選択の場合は全シナリオ分を表示します。カード固有スキルの進化もあわせて表示します。</li>
           <li><b>獲得SPから最大評価を計算</b>は、入力したSP予算内で合計評価点が最大になるスキルの組み合わせを求めます。同じグループは最上位1つを選び、下位スキルのSPもコストに含めます。ヒントLv・切れ者・適性倍率を反映します。固有・継承固有などSP対象外のスキルは計算対象外です。<b>選択中のスキルがある場合は、その選択だけを対象に計算します。</b></li>
           <li>「結果を選択に反映」を押すと、計算結果のSP取得スキルを選択状態にします（SP対象外の選択は保持）。</li>
           <li><b>画像認識</b>は「画像を追加」またはドラッグ＆ドロップ、クリップボード貼り付け、画面キャプチャに対応しています。画像はブラウザ内で処理され、外部に送信されません（OCRエンジンの取得のみネット接続を使用）。</li>
@@ -1120,7 +1180,7 @@
     </div>
   </div>
 
-  <script src="data/skills.js?v=1793976347"></script>
+  <script src="data/skills.js?v=1793985786"></script>
   <script>
   (() => {
     'use strict';
@@ -1128,6 +1188,24 @@
     const DATA = window.SKILL_DATA || {};
     const SKILLS = Array.isArray(DATA.skills) ? DATA.skills : [];
     const META = DATA.meta || {};
+    const SCENARIOS = Array.isArray(DATA.scenarios) ? DATA.scenarios : [];
+    const CARD_INITIAL_SKILLS = DATA.cardInitialSkills || {};
+    const CARD_UNIQUE_EVOLUTIONS = DATA.cardUniqueEvolutions || {};
+    const CARD_SUCCESSION_EVOLUTIONS = DATA.cardSuccessionEvolutions || {};
+    const SCENARIO_EVOLUTIONS = DATA.scenarioEvolutions || {};
+    const EFFECT_ORDER = ['速度', '加速', '回復', '緑', 'デバフ', '位置取り', '視野', 'ゲート', '特殊', 'その他'];
+    const EFFECT_CLASS = {
+      '速度': 'speed',
+      '加速': 'accel',
+      '回復': 'heal',
+      '緑': 'green',
+      'デバフ': 'debuff',
+      '位置取り': 'position',
+      '視野': 'sight',
+      'ゲート': 'gate',
+      '特殊': 'special',
+      'その他': 'other',
+    };
     const STORAGE_KEY = 'uma-skill-eval:selected:v1';
     const TYPE_ORDER = ['ノーマル', 'レア', '固有', '継承固有', '進化', '特殊', 'その他'];
     const TYPE_CLASS = {
@@ -1233,6 +1311,8 @@
         style: { 1: 'A', 2: 'A', 3: 'A', 4: 'A' },
       },
       cardId: null,
+      scenarioId: null,
+      effectCategories: new Set(EFFECT_ORDER),
       aptFilter: {
         distance: new Set(),
         ground: new Set(),
@@ -1306,7 +1386,7 @@
 
     // 検索用の正規化済み文字列をあらかじめ作っておく
     for (const s of SKILLS) {
-      s._hay = normalize(`${s.name} ${s.description} ${s.skill_id} ${s.type} ${s.category_label}`);
+      s._hay = normalize(`${s.name} ${s.description} ${s.skill_id} ${s.type} ${s.category_label} ${s.effect_category || ''}`);
       s._descOneLine = String(s.description || '').replace(/\s*\n+\s*/g, ' ');
     }
 
@@ -1375,6 +1455,14 @@
         }
         const cardId = Number(saved.cardId);
         if (Number.isInteger(cardId) && cardsById.has(cardId)) state.cardId = cardId;
+        const scenarioId = Number(saved.scenarioId);
+        if (Number.isInteger(scenarioId) && SCENARIOS.some((s) => s.id === scenarioId)) {
+          state.scenarioId = scenarioId;
+        }
+        if (Array.isArray(saved.effectCategories)) {
+          const valid = saved.effectCategories.filter((v) => EFFECT_ORDER.includes(v));
+          state.effectCategories = new Set(valid);
+        }
         if (saved.aptFilter && typeof saved.aptFilter === 'object') {
           for (const cat of ['distance', 'ground', 'style']) {
             const values = saved.aptFilter[cat];
@@ -1405,6 +1493,8 @@
           uniqueLevel: state.uniqueLevel,
           aptitude: state.aptitude,
           cardId: state.cardId,
+          scenarioId: state.scenarioId,
+          effectCategories: [...state.effectCategories],
           aptFilter: {
             distance: [...state.aptFilter.distance],
             ground: [...state.aptFilter.ground],
@@ -1609,6 +1699,203 @@
       return 'apt-bad';
     }
 
+    function effectCounts() {
+      const counts = new Map();
+      for (const s of SKILLS) {
+        const cat = s.effect_category || 'その他';
+        counts.set(cat, (counts.get(cat) || 0) + 1);
+      }
+      return counts;
+    }
+
+    function renderEffectChips() {
+      const wrap = $('effectChips');
+      if (!wrap) return;
+      const counts = effectCounts();
+      const cats = EFFECT_ORDER.filter((c) => counts.has(c));
+      const allActive = cats.every((c) => state.effectCategories.has(c));
+      const html = [
+        `<button type="button" class="chip chip-all" data-effect="__all__">すべて</button>`,
+      ];
+      for (const cat of cats) {
+        const active = state.effectCategories.has(cat);
+        html.push(
+          `<button type="button" class="chip${active ? ' active' : ''}" data-effect="${escapeHtml(cat)}">` +
+          `${escapeHtml(cat)}<span class="n">${formatNumber(counts.get(cat))}</span></button>`
+        );
+      }
+      wrap.innerHTML = html.join('');
+      const all = wrap.querySelector('[data-effect="__all__"]');
+      if (all) {
+        all.classList.toggle('active', allActive);
+        all.setAttribute('aria-pressed', String(allActive));
+      }
+      for (const btn of wrap.querySelectorAll('[data-effect]:not([data-effect="__all__"])')) {
+        btn.setAttribute('aria-pressed', String(btn.classList.contains('active')));
+      }
+    }
+
+    function scenarioEvolutionEntries(scenarioId) {
+      if (scenarioId == null) return [];
+      return SCENARIO_EVOLUTIONS[String(scenarioId)] || [];
+    }
+
+    function evolutionSkillIdsForScenario(scenarioId, cardId) {
+      const ids = new Set();
+      for (const e of scenarioEvolutionEntries(scenarioId)) ids.add(e.skill_id);
+      if (cardId != null) {
+        for (const e of CARD_UNIQUE_EVOLUTIONS[String(cardId)] || []) ids.add(e.skill_id);
+        for (const e of CARD_SUCCESSION_EVOLUTIONS[String(cardId)] || []) ids.add(e.skill_id);
+      }
+      return ids;
+    }
+
+    function initScenarios() {
+      const select = $('scenarioSelect');
+      if (!select) return;
+      let html = '<option value="">すべてのシナリオ</option>';
+      for (const s of SCENARIOS) {
+        const label = String(s.name || '').replace(/\s*\n+\s*/g, ' ');
+        html += `<option value="${s.id}">${escapeHtml(label)}</option>`;
+      }
+      select.innerHTML = html;
+      select.value = state.scenarioId != null ? String(state.scenarioId) : '';
+    }
+
+    function evolutionSkillName(id) {
+      const s = byId.get(id);
+      return s ? s.name : `#${id}`;
+    }
+
+    function evoButtonHtml(id) {
+      if (state.selected.has(id)) {
+        return '<button class="btn tiny evo-btn" type="button" disabled>選択済み</button>';
+      }
+      return `<button class="btn tiny evo-btn" type="button" data-evo-select="${id}">選択</button>`;
+    }
+
+    function updateScenarioNote() {
+      const note = $('scenarioNote');
+      if (!note) return;
+      if (state.scenarioId == null) {
+        note.textContent = 'シナリオ未選択：すべての進化スキルを表示します。';
+        return;
+      }
+      const ids = evolutionSkillIdsForScenario(state.scenarioId, state.cardId);
+      note.textContent = `このシナリオで選択可能な進化スキル ${formatNumber(ids.size)} 件。`;
+    }
+
+    function renderCardEvolution() {
+      const box = $('cardEvolution');
+      if (!box) return;
+      updateScenarioNote();
+      const card = state.cardId != null ? cardsById.get(state.cardId) : null;
+      if (!card) {
+        box.classList.remove('show');
+        box.innerHTML = '';
+        return;
+      }
+      const cardId = card.card_id;
+      const initialIds = CARD_INITIAL_SKILLS[String(cardId)] || [];
+      const initialGold = initialIds
+        .map((id) => byId.get(id))
+        .filter((s) => s && s.rarity === 2);
+      const goldIds = new Set(initialGold.map((s) => s.skill_id));
+
+      let scenarioEntries = [];
+      if (state.scenarioId != null) {
+        const name = (SCENARIOS.find((s) => s.id === state.scenarioId) || {}).name || '';
+        scenarioEntries = scenarioEvolutionEntries(state.scenarioId)
+          .map((e) => ({ ...e, scenarioName: name }));
+      } else {
+        for (const sc of SCENARIOS) {
+          for (const e of scenarioEvolutionEntries(sc.id)) {
+            scenarioEntries.push({ ...e, scenarioName: sc.name || '' });
+          }
+        }
+      }
+
+      const seenGold = new Set();
+      const goldEvos = [];
+      for (const e of scenarioEntries) {
+        if (!goldIds.has(e.base_skill_id)) continue;
+        const key = `${e.base_skill_id}:${e.skill_id}`;
+        if (seenGold.has(key)) continue;
+        seenGold.add(key);
+        goldEvos.push(e);
+      }
+
+      const uniqueEvos = CARD_UNIQUE_EVOLUTIONS[String(cardId)] || [];
+      const succEvos = CARD_SUCCESSION_EVOLUTIONS[String(cardId)] || [];
+      const sections = [];
+
+      const goldTitle = state.scenarioId != null
+        ? '初期金スキルに対応する進化スキル（このシナリオ）'
+        : '初期金スキルに対応する進化スキル（全シナリオ）';
+      if (goldEvos.length) {
+        const items = goldEvos.map((e) => {
+          const scenarioLabel = e.scenarioName
+            ? ` <span class="evo-meta">${escapeHtml(String(e.scenarioName).replace(/\s*\n+\s*/g, ' '))}</span>`
+            : '';
+          return `<div class="evo-item">` +
+            `<span class="evo-base">${escapeHtml(evolutionSkillName(e.base_skill_id))}</span>` +
+            `<span class="evo-arrow">→</span>` +
+            `<span class="evo-skill">${escapeHtml(evolutionSkillName(e.skill_id))}</span>` +
+            scenarioLabel +
+            `${evoButtonHtml(e.skill_id)}` +
+            `</div>`;
+        }).join('');
+        sections.push(
+          `<div class="evo-section">` +
+            `<div class="evo-section-title">${goldTitle}（${formatNumber(goldEvos.length)}件）</div>` +
+            `<div class="evo-list">${items}</div>` +
+          `</div>`
+        );
+      } else {
+        sections.push(
+          `<div class="evo-section">` +
+            `<div class="evo-section-title">${goldTitle}</div>` +
+            `<div class="evo-empty">${state.scenarioId != null ? 'このシナリオで選択できる進化スキルはありません。' : '対応する進化スキルはありません。'}</div>` +
+          `</div>`
+        );
+      }
+
+      if (uniqueEvos.length || succEvos.length) {
+        const items = [];
+        for (const e of uniqueEvos) {
+          items.push(
+            `<div class="evo-item">` +
+              `<span class="evo-base">${escapeHtml(evolutionSkillName(e.base_skill_id))}</span>` +
+              `<span class="evo-arrow">→</span>` +
+              `<span class="evo-skill">${escapeHtml(evolutionSkillName(e.skill_id))}</span>` +
+              `<span class="evo-meta">ランク${e.rank}</span>` +
+              `${evoButtonHtml(e.skill_id)}` +
+            `</div>`
+          );
+        }
+        for (const e of succEvos) {
+          items.push(
+            `<div class="evo-item">` +
+              `<span class="evo-base">${escapeHtml(evolutionSkillName(e.base_skill_id))}</span>` +
+              `<span class="evo-arrow">→</span>` +
+              `<span class="evo-skill">${escapeHtml(evolutionSkillName(e.skill_id))}</span>` +
+              `<span class="evo-meta">継承</span>` +
+              `${evoButtonHtml(e.skill_id)}` +
+            `</div>`
+          );
+        }
+        sections.push(
+          `<div class="evo-section">` +
+            `<div class="evo-section-title">固有スキルの進化</div>` +
+            `<div class="evo-list">${items.join('')}</div>` +
+          `</div>`
+        );
+      }
+
+      box.innerHTML = sections.join('');
+      box.classList.add('show');
+    }
+
     function renderSettings() {
       const levelSel = $('uniqueLevel');
       if (levelSel) {
@@ -1773,9 +2060,14 @@
     function filteredSkills(options = {}) {
       const terms = normalize(state.query).split(/\s+/).filter(Boolean);
       const out = [];
+      const allowedEvolutions = state.scenarioId != null
+        ? evolutionSkillIdsForScenario(state.scenarioId, state.cardId)
+        : null;
       for (const s of SKILLS) {
         if (!state.types.has(s.type)) continue;
         if (state.category && String(s.category) !== state.category) continue;
+        if (!state.effectCategories.has(s.effect_category || 'その他')) continue;
+        if (allowedEvolutions && s.type === '進化' && !allowedEvolutions.has(s.skill_id)) continue;
         if (state.onlyPurchasable && !(s.sp != null && s.sp > 0)) continue;
         if (!state.includeNegative && (s.group_rate < 0 || s.eval_point < 0)) continue;
         if (!options.ignoreOnlySelected && state.onlySelected && !state.selected.has(s.skill_id)) continue;
@@ -2590,6 +2882,7 @@
         saveSettings();
         renderSettings();
         updateCardInfo();
+        renderCardEvolution();
         recomputeDerived();
         render();
         ocrSetStatus(`「${card.display_name}」の初期適性を設定しました。`);
@@ -3673,6 +3966,10 @@
       const overridden = overriddenIds.has(id);
       const open = state.expanded.has(id);
       const badges = [typeBadge(s.type)];
+      if (s.effect_category) {
+        const cls = EFFECT_CLASS[s.effect_category] || 'other';
+        badges.push(`<span class="badge effect-${cls}">${escapeHtml(s.effect_category)}</span>`);
+      }
       if (s.group_rate < 0) {
         badges.push('<span class="badge minus">マイナス</span>');
       } else if (s._prereq_eval > 0 || s.prereq_sp > 0) {
@@ -3821,9 +4118,16 @@
       const hiddenNegative = state.includeNegative
         ? 0
         : SKILLS.filter((s) => (s.group_rate < 0 || s.eval_point < 0) && state.types.has(s.type)).length;
-      $('resultHint').textContent = hiddenNegative
-        ? `（マイナス系 ${formatNumber(hiddenNegative)} 件を非表示）`
-        : '';
+      const evoAllowed = state.scenarioId != null
+        ? evolutionSkillIdsForScenario(state.scenarioId, state.cardId)
+        : null;
+      const hiddenEvolution = evoAllowed
+        ? SKILLS.filter((s) => s.type === '進化' && state.types.has(s.type) && !evoAllowed.has(s.skill_id)).length
+        : 0;
+      const hints = [];
+      if (hiddenNegative) hints.push(`マイナス系 ${formatNumber(hiddenNegative)} 件を非表示`);
+      if (hiddenEvolution) hints.push(`シナリオ外の進化 ${formatNumber(hiddenEvolution)} 件を非表示`);
+      $('resultHint').textContent = hints.length ? `（${hints.join(' / ')}）` : '';
 
       const from = total ? start + 1 : 0;
       const to = start + pageRows.length;
@@ -3910,7 +4214,7 @@
         'upgrade_point', 'efficiency',
         'total_sp_base', 'total_sp', 'total_efficiency',
         'group_id', 'group_rate', 'prereq_sp_base', 'prereq_sp', 'prereq_eval',
-        'category', 'category_label', 'description',
+        'category', 'category_label', 'effect_category', 'description',
       ];
       const lines = [header.join(',')];
       for (const s of rows) {
@@ -4019,6 +4323,8 @@
           state.cardId = null;
           saveSettings();
           updateCardInfo();
+          renderCardEvolution();
+          onFilterChanged();
           return;
         }
         const card = cardsById.get(id);
@@ -4028,6 +4334,7 @@
         saveSettings();
         renderSettings();
         updateCardInfo();
+        renderCardEvolution();
         recomputeDerived();
         render();
       });
@@ -4039,6 +4346,49 @@
         saveSettings();
         renderSettings();
         recomputeDerived();
+        render();
+      });
+
+      $('scenarioSelect').addEventListener('change', (e) => {
+        const id = Number(e.target.value);
+        state.scenarioId = id ? id : null;
+        saveSettings();
+        renderCardEvolution();
+        onFilterChanged();
+      });
+
+      $('effectChips').addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-effect]');
+        if (!chip) return;
+        const cat = chip.dataset.effect;
+        const all = EFFECT_ORDER.filter((c) => SKILLS.some((s) => (s.effect_category || 'その他') === c));
+        if (cat === '__all__') {
+          const every = all.every((c) => state.effectCategories.has(c));
+          state.effectCategories = new Set(every ? [] : all);
+        } else if (state.effectCategories.has(cat)) {
+          state.effectCategories.delete(cat);
+        } else {
+          state.effectCategories.add(cat);
+        }
+        renderEffectChips();
+        onFilterChanged();
+      });
+
+      $('btnHintReset').addEventListener('click', () => {
+        state.hintLevels.clear();
+        saveHint();
+        recomputeDerived();
+        render();
+      });
+
+      $('cardEvolution').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-evo-select]');
+        if (!btn) return;
+        const id = Number(btn.dataset.evoSelect);
+        if (!byId.has(id)) return;
+        state.selected.add(id);
+        saveSelection();
+        renderCardEvolution();
         render();
       });
 
@@ -4250,10 +4600,13 @@
       initCategory();
       renderTypeChips();
       loadSettings();
+      renderEffectChips();
       initCards();
+      initScenarios();
       recomputeDerived();
       renderSettings();
       renderAptFilter();
+      renderCardEvolution();
       renderOcrThumbs();
       updateOcrCaptureHint();
       $('ocrFastMode').checked = state.ocrFastMode;
