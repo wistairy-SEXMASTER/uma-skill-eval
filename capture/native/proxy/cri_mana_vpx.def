@@ -1,0 +1,4 @@
+LIBRARY cri_mana_vpx
+EXPORTS
+    UnityMain=UnityPlayer.UnityMain
+    UnityMain2=UnityPlayer.UnityMain2

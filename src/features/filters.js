@@ -134,6 +134,10 @@ export function renderSettings() {
   if (fast) fast.checked = state.fastLearner;
   $('fastLearner-wrap')?.classList.toggle('on', state.fastLearner);
 
+  const diligent = $('diligent');
+  if (diligent) diligent.checked = state.diligent;
+  $('diligent-wrap')?.classList.toggle('on', state.diligent);
+
   const groups = [
     ['aptDistanceGroup', 'distance', DISTANCE_META],
     ['aptStyleGroup', 'style', STYLE_META],
@@ -176,9 +180,12 @@ export function renderSettings() {
 
   const note = $('settingsNote');
   if (note) {
+    const discount = state.fastLearner
+      ? '切れ者 −10%'
+      : (state.diligent ? '勉強家 −4%' : '');
     note.textContent =
       `固有 ${formatNumber(state.uniqueLevel * UNIQUE_POINT_PER_LEVEL)}点` +
-      (state.fastLearner ? ' / 切れ者 −10%' : '');
+      (discount ? ` / ${discount}` : '');
   }
 }
 

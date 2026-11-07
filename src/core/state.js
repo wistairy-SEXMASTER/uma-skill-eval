@@ -9,6 +9,7 @@ import {
   EFFECT_ORDER,
   OPT_MAX_BUDGET,
   TYPE_ORDER,
+  GAME_API_DEFAULT,
 } from './constants.js';
 
 export const state = {
@@ -24,8 +25,10 @@ export const state = {
   pageSize: 100,
   selected: new Set(),
   expanded: new Set(),
+  learnedSkillIds: new Set(),
   hintLevels: new Map(),
   fastLearner: false,
+  diligent: false,
   uniqueLevel: 1,
   aptitude: {
     distance: { 1: 'A', 2: 'A', 3: 'A', 4: 'A' },
@@ -45,6 +48,8 @@ export const state = {
   ocrFastMode: true,
   ocrAutoCrop: true,
   ocrSensitivity: 'medium',
+  gameServer: GAME_API_DEFAULT,
+  gameAuto: false,
 };
 
 export function restoreSelection() {
@@ -101,6 +106,7 @@ export function loadSettings() {
     const saved = JSON.parse(raw);
     if (!saved || typeof saved !== 'object') return;
     if (typeof saved.fastLearner === 'boolean') state.fastLearner = saved.fastLearner;
+    if (typeof saved.diligent === 'boolean') state.diligent = saved.diligent;
     const level = Number(saved.uniqueLevel);
     if (Number.isInteger(level) && level >= 1 && level <= 6) state.uniqueLevel = level;
     for (const cat of ['distance', 'style']) {
@@ -113,6 +119,13 @@ export function loadSettings() {
     }
     const cardId = Number(saved.cardId);
     if (Number.isInteger(cardId) && cardsById.has(cardId)) state.cardId = cardId;
+    if (Array.isArray(saved.learnedSkillIds)) {
+      state.learnedSkillIds = new Set(
+        saved.learnedSkillIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && byId.has(id))
+      );
+    }
     const scenarioId = Number(saved.scenarioId);
     if (Number.isInteger(scenarioId) && SCENARIOS.some((s) => s.id === scenarioId)) {
       state.scenarioId = scenarioId;
@@ -141,6 +154,10 @@ export function loadSettings() {
     if (saved.ocrSensitivity === 'high' || saved.ocrSensitivity === 'medium' || saved.ocrSensitivity === 'low') {
       state.ocrSensitivity = saved.ocrSensitivity;
     }
+    if (typeof saved.gameServer === 'string' && /^https?:\/\//i.test(saved.gameServer)) {
+      state.gameServer = saved.gameServer.replace(/\/+$/, '');
+    }
+    if (typeof saved.gameAuto === 'boolean') state.gameAuto = saved.gameAuto;
   } catch (err) { /* ignore */ }
 }
 
@@ -148,10 +165,12 @@ export function saveSettings() {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
       fastLearner: state.fastLearner,
+      diligent: state.diligent,
       uniqueLevel: state.uniqueLevel,
       aptitude: state.aptitude,
       cardId: state.cardId,
       scenarioId: state.scenarioId,
+      learnedSkillIds: [...state.learnedSkillIds],
       effectCategories: [...state.effectCategories],
       aptFilter: {
         distance: [...state.aptFilter.distance],
@@ -164,6 +183,8 @@ export function saveSettings() {
       ocrFastMode: state.ocrFastMode,
       ocrAutoCrop: state.ocrAutoCrop,
       ocrSensitivity: state.ocrSensitivity,
+      gameServer: state.gameServer,
+      gameAuto: state.gameAuto,
     }));
   } catch (err) { /* ignore */ }
 }

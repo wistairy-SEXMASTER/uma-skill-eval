@@ -67,6 +67,7 @@ export const FILTER_CATEGORIES = [
 
 export const OPT_MAX_BUDGET = 20000;
 export const FAST_LEARNER_DISCOUNT = 0.10;
+export const DILIGENT_DISCOUNT = 0.04; // 勉強家（切れ者と同時の場合は切れ者を優先）
 export const UNIQUE_POINT_PER_LEVEL = 170; // 本体固有スキル: 固有Lv × 170
 export const INHERIT_UNIQUE_POINT = 180;   // 継承固有スキル: 一律180
 
@@ -78,6 +79,10 @@ export const DERIVED_KEYS = {
   efficiency: '_efficiency',
   total_efficiency: '_total_efficiency',
 };
+
+// ゲームデータ取得（パケット転送サーバー）
+export const GAME_API_DEFAULT = 'http://127.0.0.1:4693';
+export const GAME_AUTO_INTERVAL = 5000;
 
 // OCR
 export const OCR_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';

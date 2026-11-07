@@ -103,14 +103,18 @@ export function recomputeDerived() {
     const hint = effectiveHint(s.skill_id);
     let sp = applyHintDiscount(s.sp, hint);
     let prereqSp = 0;
+    let prereqSpBase = 0;
     let prereqEval = 0;
     for (const lower of CHAINS.get(s.skill_id) || []) {
-      if (lower.sp != null) {
+      // 取得済みの下位スキルは、残りのSPコストに含めない
+      if (!state.learnedSkillIds.has(lower.skill_id) && lower.sp != null) {
         prereqSp += applyHintDiscount(lower.sp, effectiveHint(lower.skill_id)) || 0;
+        prereqSpBase += Number(lower.sp) || 0;
       }
       prereqEval = Math.max(prereqEval, lower._eval);
     }
     let totalSp = s.sp == null ? null : sp + prereqSp;
+    let totalSpBase = s.sp == null ? null : (Number(s.sp) || 0) + prereqSpBase;
     let evolutionBase = null;
     let evolutionBaseTotalSp = null;
 
@@ -123,15 +127,19 @@ export function recomputeDerived() {
         const baseHint = effectiveHint(base.skill_id);
         const baseSp = applyHintDiscount(base.sp, baseHint);
         let basePrereqSp = 0;
+        let basePrereqSpBase = 0;
         for (const lower of CHAINS.get(base.skill_id) || []) {
-          if (lower.sp != null) {
+          if (!state.learnedSkillIds.has(lower.skill_id) && lower.sp != null) {
             basePrereqSp += applyHintDiscount(lower.sp, effectiveHint(lower.skill_id)) || 0;
+            basePrereqSpBase += Number(lower.sp) || 0;
           }
         }
         sp = baseSp;
         prereqSp = basePrereqSp;
+        prereqSpBase = basePrereqSpBase;
         totalSp = baseSp == null ? null : baseSp + basePrereqSp;
-        evolutionBaseTotalSp = base.total_sp == null ? null : base.total_sp;
+        totalSpBase = baseSp == null ? null : (Number(base.sp) || 0) + basePrereqSpBase;
+        evolutionBaseTotalSp = totalSpBase;
         prereqEval = base._eval;
       }
     }
@@ -139,7 +147,9 @@ export function recomputeDerived() {
     s._hint = hint;
     s._sp = sp;
     s._total_sp = totalSp;
+    s._total_sp_base = totalSpBase;
     s._prereq_sp = s.sp == null && !evolutionBase ? 0 : prereqSp;
+    s._prereq_sp_base = s.sp == null && !evolutionBase ? 0 : prereqSpBase;
     s._prereq_eval = prereqEval;
     s._upgrade_point = s._eval - prereqEval;
     s._efficiency = sp != null && sp > 0 ? s._upgrade_point / sp : null;
@@ -147,7 +157,7 @@ export function recomputeDerived() {
     s._evolution_base = evolutionBase ? evolutionBase.skill_id : null;
     s._evolution_base_name = evolutionBase ? evolutionBase.name : '';
     s._evolution_base_total_sp = evolutionBaseTotalSp;
-    s._evolution_base_prereq_sp = evolutionBase ? evolutionBase.prereq_sp : null;
+    s._evolution_base_prereq_sp = evolutionBase ? prereqSpBase : null;
   }
 
   invalidateOptimization();

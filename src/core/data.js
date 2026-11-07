@@ -7,6 +7,7 @@ export const DATA = SKILL_DATA || {};
 export const SKILLS = Array.isArray(DATA.skills) ? DATA.skills : [];
 export const META = DATA.meta || {};
 export const CARD_INITIAL_SKILLS = DATA.cardInitialSkills || {};
+export const CARD_INITIAL_SKILL_RANKS = DATA.cardInitialSkillRanks || {};
 export const CARD_GOLD_SKILL_EVOLUTIONS = DATA.cardGoldSkillEvolutions || {};
 export const SCENARIOS = Array.isArray(DATA.scenarios) ? DATA.scenarios : [];
 export const SCENARIO_EVOLUTIONS = DATA.scenarioEvolutions || {};

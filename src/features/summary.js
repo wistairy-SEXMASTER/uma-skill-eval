@@ -38,7 +38,8 @@ export function computeSummary() {
     evalTotal += Number(s._eval) || 0;
     if (s._total_sp != null) spTotal += Number(s._total_sp) || 0;
     else evalNoSp += Number(s._eval) || 0;
-    if (s.total_sp != null) spBaseTotal += Number(s.total_sp) || 0;
+    if (s._total_sp_base != null) spBaseTotal += Number(s._total_sp_base) || 0;
+    else if (s.total_sp != null) spBaseTotal += Number(s.total_sp) || 0;
     else if (s._evolution_base_total_sp != null) spBaseTotal += Number(s._evolution_base_total_sp) || 0;
   }
   const overridden = selected.filter((s) => !countedSet.has(s.skill_id));
@@ -87,7 +88,7 @@ export function updateSummary() {
     note.innerHTML =
       `<span class="warn">集計外 ${formatNumber(sum.overridden.length)} 件</span>` +
       `（集計対象 ${formatNumber(sum.counted.length)} 件）。` +
-      `上位スキル・進化スキルを選択すると、下位スキルのSPを含めて計算されます。` +
+      `上位スキル・進化スキルを選択すると、未取得の下位スキルのSPを含めて計算されます。` +
       escapeHtml(settingText + aptText + savedText);
   } else {
     note.textContent =
@@ -132,10 +133,10 @@ export function exportCsv() {
       sp: s._sp,
       upgrade_point: s._upgrade_point,
       efficiency: s._efficiency == null ? null : Math.round(s._efficiency * 1000) / 1000,
-      total_sp_base: s.total_sp,
+      total_sp_base: s._total_sp_base,
       total_sp: s._total_sp,
       total_efficiency: s._total_efficiency == null ? null : Math.round(s._total_efficiency * 1000) / 1000,
-      prereq_sp_base: s.prereq_sp,
+      prereq_sp_base: s._prereq_sp_base,
       prereq_sp: s._prereq_sp,
       prereq_eval: s._prereq_eval,
     };

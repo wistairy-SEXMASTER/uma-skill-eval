@@ -25,3 +25,18 @@ assets/umamusume-font.ttf
 
 # OCR精度確認用のスクリーンショット（著作物のためコミットしない）
 samples/
+
+# パケット取得のネイティブビルド成果物
+capture/native/bin/
+capture/native/proxy/*.dll
+capture/native/proxy/*.pdb
+capture/native/proxy/*.lib
+capture/native/**/*.pdb
+capture/native/**/*.log
+
+# 抽出データのバックアップ
+data/skills.js.bak
+
+# 解析用の一時CSV
+out/obtainable_current.csv
+out/obtainable_skills.csv

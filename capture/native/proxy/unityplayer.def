@@ -1,0 +1,4 @@
+LIBRARY UnityPlayer
+EXPORTS
+    UnityMain=UnityPlayer_orig.UnityMain
+    UnityMain2=UnityPlayer_orig.UnityMain2

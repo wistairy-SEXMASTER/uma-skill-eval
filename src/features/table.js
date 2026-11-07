@@ -198,7 +198,7 @@ function rowHtml(s, overriddenIds) {
           `<span>割引後SP <b>${discountedSp || '—'}</b>${hintNote}</span>` +
           `<span>下位込み割引後SP <b>${discountedTotal || '—'}</b></span>` +
           `<span>${isEvolution ? '進化元の評価点' : '下位評価点'} <b>${formatNumber(s._prereq_eval)}</b></span>` +
-          `<span>${isEvolution ? '進化元の下位SP（割引前）' : '下位SP（割引前）'} <b>${formatNumber(isEvolution ? s._evolution_base_prereq_sp : s.prereq_sp)}</b></span>` +
+          `<span>${isEvolution ? '進化元の下位SP（割引前）' : '下位SP（割引前）'} <b>${formatNumber(isEvolution ? s._evolution_base_prereq_sp : s._prereq_sp_base)}</b></span>` +
           `<span>上昇評価点 <b>${formatNumber(s._upgrade_point)}</b></span>` +
         `</div>` +
       `</td></tr>`

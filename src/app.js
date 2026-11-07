@@ -2,7 +2,7 @@
 
 import { state, saveSettings, saveSelection, saveHint, loadSettings } from './core/state.js';
 import { SKILLS, byId, cardsById } from './core/data.js';
-import { APT_MULT, OPT_MAX_BUDGET, EFFECT_ORDER, TYPE_ORDER } from './core/constants.js';
+import { APT_MULT, OPT_MAX_BUDGET, EFFECT_ORDER, TYPE_ORDER, GAME_API_DEFAULT } from './core/constants.js';
 import { $ } from './core/utils.js';
 import { recomputeDerived } from './core/aptitude.js';
 import { invalidateOptimization } from './core/optimizer-state.js';
@@ -24,6 +24,14 @@ import {
   selectEvolutionOption,
 } from './features/evolution.js';
 import { render, toggleSkill, togglePage, setSort } from './features/table.js';
+import {
+  fetchGameData,
+  importGameJsonFile,
+  initGameData,
+  resetGameVersion,
+  startGameAuto,
+  stopGameAuto,
+} from './features/gameData.js';
 import { runOptimization, applyOptimizationResult } from './features/optimizer.js';
 import { exportCsv } from './features/summary.js';
 import {
@@ -82,6 +90,8 @@ function bind() {
     const target = e.target;
     if (target.id === 'fastLearner') {
       state.fastLearner = target.checked;
+    } else if (target.id === 'diligent') {
+      state.diligent = target.checked;
     } else if (target.id === 'uniqueLevel') {
       const level = Number(target.value);
       state.uniqueLevel = Number.isInteger(level) && level >= 1 && level <= 6 ? level : 1;
@@ -147,6 +157,28 @@ function bind() {
     renderSettings();
     recomputeDerived();
     render();
+  });
+
+  $('btnGameFetch').addEventListener('click', () => fetchGameData());
+  $('btnGameImport').addEventListener('click', () => $('gameFile').click());
+  $('gameFile').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (file) await importGameJsonFile(file);
+  });
+  $('gameServer').addEventListener('change', (e) => {
+    const value = e.target.value.trim() || GAME_API_DEFAULT;
+    state.gameServer = value.replace(/\/+$/, '');
+    e.target.value = state.gameServer;
+    saveSettings();
+    resetGameVersion();
+  });
+  $('gameAuto').addEventListener('change', (e) => {
+    state.gameAuto = e.target.checked;
+    e.target.closest('.toggle').classList.toggle('on', e.target.checked);
+    saveSettings();
+    if (state.gameAuto) startGameAuto();
+    else stopGameAuto();
   });
 
   $('effectChips').addEventListener('click', (e) => {
@@ -431,4 +463,5 @@ export function init() {
   bind();
   updateStickyOffset();
   render();
+  initGameData();
 }

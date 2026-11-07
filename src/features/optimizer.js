@@ -27,8 +27,18 @@ function optimizerCandidates() {
   );
 }
 
+// スキル単体の上昇効率。表の「上昇効率」と同じく
+// （このスキルの評価点 − 直下の下位スキルの評価点）÷ このスキルのSP。
+function packageEfficiency(s) {
+  if (s._efficiency != null) return s._efficiency;
+  if (s._sp > 0) return s._upgrade_point / s._sp;
+  return 0;
+}
+
 // グループごとに「どの上位段階まで取るか」を選ぶ多重選択ナップサック。
 // 価値 = 適性込み評価点、コスト = 下位込みSP（ヒント・切れ者込み）。
+// 合計評価点を最大化したうえで、同評価・同SPの組み合わせが複数ある場合は
+// 上昇効率の合計が高いものを選ぶ。
 function optimizeSkills(budget) {
   const candidates = optimizerCandidates();
   if (!candidates.length) return null;
@@ -46,15 +56,19 @@ function optimizeSkills(budget) {
   );
   const maxBudget = Math.max(0, Math.min(Math.floor(budget), OPT_MAX_BUDGET, sumMax));
   const dp = new Float64Array(maxBudget + 1).fill(-Infinity);
+  const efficiencyDp = new Float64Array(maxBudget + 1).fill(-Infinity);
   dp[0] = 0;
+  efficiencyDp[0] = 0;
 
   const choices = [];
   for (const packages of groupList) {
     const costs = packages.map((p) => p._total_sp);
     const values = packages.map((p) => p._eval);
+    const efficiencies = packages.map(packageEfficiency);
     const choice = new Int16Array(maxBudget + 1).fill(-1);
     for (let b = maxBudget; b >= 0; b--) {
       let best = dp[b];
+      let bestEfficiency = efficiencyDp[b];
       let bestIdx = -1;
       for (let i = 0; i < packages.length; i++) {
         const cost = costs[i];
@@ -62,12 +76,23 @@ function optimizeSkills(budget) {
         const prev = dp[b - cost];
         if (prev === -Infinity) continue;
         const value = prev + values[i];
-        if (value > best || (value === best && bestIdx !== -1 && cost < costs[bestIdx])) {
+        const efficiency = efficiencyDp[b - cost] + efficiencies[i];
+        const betterValue = value > best;
+        const betterEfficiency =
+          value === best && efficiency > bestEfficiency + 1e-9;
+        const cheaperTie =
+          value === best &&
+          Math.abs(efficiency - bestEfficiency) <= 1e-9 &&
+          bestIdx !== -1 &&
+          cost < costs[bestIdx];
+        if (betterValue || betterEfficiency || cheaperTie) {
           best = value;
+          bestEfficiency = efficiency;
           bestIdx = i;
         }
       }
       dp[b] = best;
+      efficiencyDp[b] = bestEfficiency;
       choice[b] = bestIdx;
     }
     choices.push(choice);
@@ -93,8 +118,13 @@ function optimizeSkills(budget) {
       b -= skill._total_sp;
     }
   }
+  // 結果はヒントLvの高い順に並べる。同じLv内は上昇効率の高い順。
   chosen.sort((a, b2) =>
-    a.group_id - b2.group_id || a.group_rate - b2.group_rate || a.skill_id - b2.skill_id
+    (b2._hint || 0) - (a._hint || 0) ||
+    packageEfficiency(b2) - packageEfficiency(a) ||
+    a.group_id - b2.group_id ||
+    a.group_rate - b2.group_rate ||
+    a.skill_id - b2.skill_id
   );
 
   return {
@@ -132,13 +162,19 @@ export function runOptimization() {
   if (apply) apply.disabled = false;
 
   const efficiency = result.efficiency == null ? '—' : result.efficiency.toFixed(2);
-  const items = result.chosen.map((s) =>
-    `<li>${escapeHtml(s.name)}` +
-    `<span class="opt-meta">SP ${formatNumber(s._total_sp)} / 評価 ${formatNumber(s._eval)}</span></li>`
-  ).join('');
+  const items = result.chosen.map((s) => {
+    const upgradeEff = s._efficiency == null ? '—' : s._efficiency.toFixed(2);
+    const totalEff = s._total_efficiency == null ? '—' : s._total_efficiency.toFixed(2);
+    return `<li>${escapeHtml(s.name)}` +
+      `<span class="opt-meta">ヒントLv ${s._hint || 0}` +
+      ` / SP ${formatNumber(s._total_sp)} / 評価 ${formatNumber(s._eval)}` +
+      ` / 上昇効率 ${upgradeEff} / 総合効率 ${totalEff}</span></li>`;
+  }).join('');
   out.innerHTML =
     `<div class="opt-summary">最大評価点 <b>${formatNumber(result.totalEval)}</b> ／ ` +
     `合計SP <b>${formatNumber(result.totalSp)}</b> ／ 評価効率 <b>${efficiency}</b></div>` +
+    `<div class="opt-note">ヒントLvの高い順に表示（同じLv内は上昇効率の高い順）。` +
+    `同評価・同SPの組み合わせでは、上昇効率の合計が高いものを優先しています。</div>` +
     `<div class="opt-note">対象 ${formatNumber(result.candidates)} スキル` +
     `（${formatNumber(result.groups)} グループ）・計算 ${elapsed.toFixed(0)}ms` +
     (result.capped ? `・予算上限 ${formatNumber(OPT_MAX_BUDGET)}SP` : '') +
