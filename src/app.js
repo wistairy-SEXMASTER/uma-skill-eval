@@ -4,19 +4,17 @@ import { state, saveSettings, saveSelection, saveHint, loadSettings } from './co
 import { SKILLS, byId, cardsById } from './core/data.js';
 import { APT_MULT, OPT_MAX_BUDGET, EFFECT_ORDER, TYPE_ORDER, GAME_API_DEFAULT } from './core/constants.js';
 import { $ } from './core/utils.js';
-import { recomputeDerived } from './core/aptitude.js';
+import { recomputeDerived } from './core/derived.js';
 import { invalidateOptimization } from './core/optimizer-state.js';
+import { initMeta } from './features/meta.js';
 import {
-  initMeta,
   initCategory,
   renderTypeChips,
   renderEffectChips,
-  renderSettings,
-  initCards,
-  updateCardInfo,
-  applyCardAptitudes,
   renderAptFilter,
 } from './features/filters.js';
+import { renderSettings } from './features/settings.js';
+import { initCards, updateCardInfo, applyCardAptitudes } from './features/cards.js';
 import {
   renderCardEvolution,
   renderScenarioEvolution,
@@ -33,7 +31,7 @@ import {
   stopGameAuto,
 } from './features/gameData.js';
 import { runOptimization, applyOptimizationResult } from './features/optimizer.js';
-import { exportCsv } from './features/summary.js';
+import { exportCsv } from './features/csv.js';
 import {
   ocrAddFile,
   pasteOcrImage,

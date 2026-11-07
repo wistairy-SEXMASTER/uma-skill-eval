@@ -1,40 +1,14 @@
-// 検索・種別・カテゴリ・効果カテゴリ・適性フィルタと、カード/設定UI。
+// 検索・種別・カテゴリ・効果カテゴリ・適性フィルタ。
 
 import { state } from '../core/state.js';
-import {
-  SKILLS,
-  META,
-  CARDS,
-  cardsById,
-} from '../core/data.js';
+import { SKILLS } from '../core/data.js';
 import {
   TYPE_ORDER,
   EFFECT_ORDER,
   FILTER_CATEGORIES,
-  APT_GRADES,
-  APT_MULT,
-  DISTANCE_META,
-  STYLE_META,
-  UNIQUE_POINT_PER_LEVEL,
 } from '../core/constants.js';
-import {
-  $,
-  escapeHtml,
-  formatNumber,
-  formatDate,
-  aptClass,
-  normalize,
-} from '../core/utils.js';
+import { $, escapeHtml, formatNumber, normalize } from '../core/utils.js';
 import { skillMatchesAptFilter } from '../core/aptitude.js';
-
-export function initMeta() {
-  const total = SKILLS.length;
-  const db = formatDate(META.db_mtime);
-  const generated = formatDate(META.generated_at);
-  $('meta').innerHTML =
-    `収録 <b>${formatNumber(total)}</b> スキル（特殊・期限切れを除く）<br>` +
-    `DB更新 ${escapeHtml(db)} ／ 抽出 ${escapeHtml(generated)}`;
-}
 
 export function initCategory() {
   const select = $('category');
@@ -116,126 +90,6 @@ export function renderEffectChips() {
   }
   for (const btn of wrap.querySelectorAll('[data-effect]:not([data-effect="__all__"])')) {
     btn.setAttribute('aria-pressed', String(btn.classList.contains('active')));
-  }
-}
-
-export function renderSettings() {
-  const levelSel = $('uniqueLevel');
-  if (levelSel) {
-    if (levelSel.options.length !== 6) {
-      levelSel.innerHTML = [1, 2, 3, 4, 5, 6].map((lv) =>
-        `<option value="${lv}">${lv}</option>`
-      ).join('');
-    }
-    levelSel.value = String(state.uniqueLevel);
-  }
-
-  const fast = $('fastLearner');
-  if (fast) fast.checked = state.fastLearner;
-  $('fastLearner-wrap')?.classList.toggle('on', state.fastLearner);
-
-  const diligent = $('diligent');
-  if (diligent) diligent.checked = state.diligent;
-  $('diligent-wrap')?.classList.toggle('on', state.diligent);
-
-  const groups = [
-    ['aptDistanceGroup', 'distance', DISTANCE_META],
-    ['aptStyleGroup', 'style', STYLE_META],
-  ];
-  for (const [groupId, cat, meta] of groups) {
-    const group = $(groupId);
-    if (!group) continue;
-    if (group.querySelectorAll('.apt-pair').length !== 4) {
-      group.querySelectorAll('.apt-pair').forEach((el) => el.remove());
-      for (const id of [1, 2, 3, 4]) {
-        const pair = document.createElement('span');
-        pair.className = 'apt-pair';
-        const tag = document.createElement('span');
-        tag.className = 'tag';
-        tag.textContent = meta[id].short;
-        tag.title = meta[id].long;
-        const sel = document.createElement('select');
-        sel.className = 'apt-select';
-        sel.dataset.aptCat = cat;
-        sel.dataset.aptId = String(id);
-        sel.setAttribute('aria-label', `${meta[id].long}の適性`);
-        sel.innerHTML = APT_GRADES.map((g) =>
-          `<option value="${g}">${g}</option>`
-        ).join('');
-        pair.append(tag, sel);
-        group.appendChild(pair);
-      }
-    }
-    for (const id of [1, 2, 3, 4]) {
-      const sel = group.querySelector(
-        `select[data-apt-cat="${cat}"][data-apt-id="${id}"]`
-      );
-      if (!sel) continue;
-      const grade = state.aptitude[cat][id];
-      sel.value = grade;
-      sel.className = `apt-select ${aptClass(grade)}`;
-      sel.title = `${meta[id].long}適性: ${grade}（×${APT_MULT[grade].toFixed(1)}）`;
-    }
-  }
-
-  const note = $('settingsNote');
-  if (note) {
-    const discount = state.fastLearner
-      ? '切れ者 −10%'
-      : (state.diligent ? '勉強家 −4%' : '');
-    note.textContent =
-      `固有 ${formatNumber(state.uniqueLevel * UNIQUE_POINT_PER_LEVEL)}点` +
-      (discount ? ` / ${discount}` : '');
-  }
-}
-
-export function initCards() {
-  const select = $('cardSelect');
-  if (!select) return;
-  const byChara = new Map();
-  for (const card of CARDS) {
-    const key = card.chara_name || String(card.chara_id);
-    if (!byChara.has(key)) byChara.set(key, []);
-    byChara.get(key).push(card);
-  }
-  const charaNames = [...byChara.keys()].sort((a, b) => a.localeCompare(b, 'ja'));
-  let html = '<option value="">ウマ娘を選択しない</option>';
-  for (const name of charaNames) {
-    html += `<optgroup label="${escapeHtml(name)}">`;
-    const cards = byChara.get(name)
-      .slice()
-      .sort((a, b) => (a.costume_name || '').localeCompare(b.costume_name || '', 'ja'));
-    for (const card of cards) {
-      const label = card.display_name || card.costume_name || String(card.card_id);
-      html += `<option value="${card.card_id}">${escapeHtml(label)}</option>`;
-    }
-    html += '</optgroup>';
-  }
-  select.innerHTML = html;
-  select.value = state.cardId != null ? String(state.cardId) : '';
-  updateCardInfo();
-}
-
-export function updateCardInfo() {
-  const info = $('cardInfo');
-  const card = state.cardId != null ? cardsById.get(state.cardId) : null;
-  if (!info) return;
-  if (!card) {
-    info.textContent = '選択すると距離・脚質の初期適性を自動設定します。';
-    return;
-  }
-  const ground = card.aptitude.ground;
-  info.textContent =
-    `${card.display_name || card.chara_name}` +
-    ` ／ 芝 ${ground['1'] || '—'}・ダート ${ground['2'] || '—'}` +
-    ` ／ 初期脚質 ${card.running_style_name || '—'}`;
-}
-
-export function applyCardAptitudes(card) {
-  if (!card) return;
-  for (const id of ['1', '2', '3', '4']) {
-    state.aptitude.distance[id] = card.aptitude.distance[id] || 'A';
-    state.aptitude.style[id] = card.aptitude.style[id] || 'A';
   }
 }
 

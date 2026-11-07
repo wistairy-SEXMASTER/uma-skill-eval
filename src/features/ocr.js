@@ -5,8 +5,9 @@ import { SKILLS, byId, CARDS, cardsById } from '../core/data.js';
 import { OCR_CDN, OCR_FONT_URL, OCR_MAX_IMAGES } from '../core/constants.js';
 import { $, escapeHtml, normalize, formatNumber } from '../core/utils.js';
 import { applyHintDiscount, spDiscountRate } from '../core/hints.js';
-import { recomputeDerived } from '../core/aptitude.js';
-import { applyCardAptitudes, renderSettings, updateCardInfo } from './filters.js';
+import { recomputeDerived } from '../core/derived.js';
+import { renderSettings } from './settings.js';
+import { applyCardAptitudes, updateCardInfo } from './cards.js';
 import { render } from './table.js';
 import { renderCardEvolution, renderScenarioEvolution } from './evolution.js';
 
