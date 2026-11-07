@@ -114,8 +114,14 @@ function bind() {
   });
 
   $('btnAptReset').addEventListener('click', () => {
-    for (const cat of ['distance', 'style']) {
-      for (const id of [1, 2, 3, 4]) state.aptitude[cat][id] = 'A';
+    const card = state.cardId != null ? cardsById.get(state.cardId) : null;
+    if (card) {
+      // ウマ娘選択中は、そのカードの初期適性に戻す。
+      applyCardAptitudes(card);
+    } else {
+      for (const cat of ['distance', 'style']) {
+        for (const id of [1, 2, 3, 4]) state.aptitude[cat][id] = 'A';
+      }
     }
     saveSettings();
     renderSettings();
@@ -146,16 +152,6 @@ function bind() {
     recomputeDerived();
     renderCardEvolution();
     renderScenarioEvolution();
-    render();
-  });
-
-  $('btnCardAptReset').addEventListener('click', () => {
-    const card = state.cardId != null ? cardsById.get(state.cardId) : null;
-    if (!card) return;
-    applyCardAptitudes(card);
-    saveSettings();
-    renderSettings();
-    recomputeDerived();
     render();
   });
 

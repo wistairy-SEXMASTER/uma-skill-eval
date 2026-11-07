@@ -208,7 +208,7 @@ function rowHtml(s, overriddenIds) {
 }
 
 function renderArrows() {
-  for (const key of ['name', 'eval_point', 'sp', 'upgrade_point', 'efficiency', 'total_sp', 'total_efficiency']) {
+  for (const key of ['name', 'eval_point', 'hint', 'sp', 'upgrade_point', 'efficiency', 'total_sp', 'total_efficiency']) {
     const el = $('arrow-' + key);
     if (!el) continue;
     el.textContent = state.sortKey === key ? (state.sortDir === 'asc' ? '▲' : '▼') : '';

@@ -218,12 +218,10 @@ export function initCards() {
 
 export function updateCardInfo() {
   const info = $('cardInfo');
-  const reset = $('btnCardAptReset');
   const card = state.cardId != null ? cardsById.get(state.cardId) : null;
   if (!info) return;
   if (!card) {
     info.textContent = '選択すると距離・脚質の初期適性を自動設定します。';
-    if (reset) reset.disabled = true;
     return;
   }
   const ground = card.aptitude.ground;
@@ -231,7 +229,6 @@ export function updateCardInfo() {
     `${card.display_name || card.chara_name}` +
     ` ／ 芝 ${ground['1'] || '—'}・ダート ${ground['2'] || '—'}` +
     ` ／ 初期脚質 ${card.running_style_name || '—'}`;
-  if (reset) reset.disabled = false;
 }
 
 export function applyCardAptitudes(card) {

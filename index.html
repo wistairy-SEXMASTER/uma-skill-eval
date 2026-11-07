@@ -28,6 +28,8 @@
             <option value="total_efficiency:asc">総合効率 低い順</option>
             <option value="efficiency:desc">上昇効率 高い順</option>
             <option value="efficiency:asc">上昇効率 低い順</option>
+            <option value="hint:desc">ヒントLv 高い順</option>
+            <option value="hint:asc">ヒントLv 低い順</option>
             <option value="eval_point:desc">評価点 高い順</option>
             <option value="eval_point:asc">評価点 低い順</option>
             <option value="sp:asc">SP 安い順</option>
@@ -53,7 +55,6 @@
         <div class="settings-row" id="cardRow">
           <span class="settings-title">ウマ娘</span>
           <select id="cardSelect" class="card-select" title="ウマ娘を選択すると距離・脚質の初期適性を自動設定"></select>
-          <button class="btn tiny" id="btnCardAptReset" type="button" disabled>初期適性に戻す</button>
           <span class="card-info" id="cardInfo"></span>
         </div>
         <div class="settings-row" id="gameDataRow">
@@ -100,7 +101,7 @@
           <span class="setting-group" id="aptStyleGroup">
             <span class="label">脚質</span>
           </span>
-          <button class="btn tiny" id="btnAptReset" type="button" title="距離・脚質の適性をすべてAに戻す">適性リセット</button>
+          <button class="btn tiny" id="btnAptReset" type="button" title="選択中のウマ娘の初期適性に戻す（未選択時は距離・脚質をすべてA）">適性リセット</button>
           <button class="btn tiny" id="btnHintReset" type="button" title="すべてのスキルのヒントLvを0に戻します">ヒントLvリセット</button>
           <span class="settings-note" id="settingsNote"></span>
         </div>
@@ -203,7 +204,7 @@
           <th class="col-check"><input type="checkbox" id="pageSelect" title="このページを全選択 / 解除"></th>
           <th class="sortable" data-sort="name">スキル<span class="arrow" id="arrow-name"></span></th>
           <th class="sortable num" data-sort="eval_point" title="skill_data.grade_value">評価点<span class="arrow" id="arrow-eval_point"></span></th>
-          <th class="col-hint" title="スキルごとのヒントLv（SP割引）">ヒントLv</th>
+          <th class="sortable col-hint" data-sort="hint" title="スキルごとのヒントLv（SP割引）。クリックで並び替え">ヒントLv<span class="arrow" id="arrow-hint"></span></th>
           <th class="sortable num" data-sort="sp" title="single_mode_skill_need_point.need_skill_point">SP<span class="arrow" id="arrow-sp"></span></th>
           <th class="sortable num col-upgrade" data-sort="upgrade_point" title="下位スキルからの上昇評価点">上昇評価点<span class="arrow" id="arrow-upgrade_point"></span></th>
           <th class="sortable num col-eff" data-sort="efficiency" title="上昇評価点 ÷ SP">上昇効率<span class="arrow" id="arrow-efficiency"></span></th>
@@ -234,7 +235,7 @@
           <li><b>上位スキルを選択すると、同じグループの下位スキルも自動的に選択されます。</b>例: 「決意の直滑降」を選ぶと「直滑降」も選択されます。下位スキルは「集計外」と表示され、合計には上位スキルのみが加算されます。<b>進化スキルを選択した場合も、進化元の金スキル本体とその下位スキルが自動的に選択されます。</b></li>
           <li><b>固有</b>・<b>進化</b>はSPでは取得できませんが、評価点は合計に加算されます（合計SPには含まれません）。</li>
           <li><b>マイナス系</b>（<code>group_rate = -1</code> または評価点が負）は初期状態では非表示です。必要に応じて「マイナス系を含む」をオンにしてください。</li>
-          <li><b>ヒントLv</b>はスキルごとに、一覧の「ヒントLv」列で変更できます。初期値は全スキルLv0（割引なし）です。「<b>ヒントLvリセット</b>」で全スキルのヒントLvを0に戻せます。</li>
+          <li><b>ヒントLv</b>はスキルごとに、一覧の「ヒントLv」列で変更できます。初期値は全スキルLv0（割引なし）です。「<b>ヒントLvリセット</b>」で全スキルのヒントLvを0に戻せます。「ヒントLv」列のヘッダー、または「並び順」から<b>ヒントLv順</b>にソートできます。</li>
           <li>ヒントLvによるSP減少率は <b>Lv1 −10% / Lv2 −20% / Lv3 −30% / Lv4 −35% / Lv5 −40%</b> です。割引後のSPはスキルごとに<b>小数点以下切り捨て</b>で計算します（例: 170SPのLv4 → 110SP）。</li>
           <li><b>切れ者</b>をオンにすると、ヒントLvの割引に <b>−10%</b> を加算します（例: Lv5＋切れ者 = −50%）。切れ者は全スキルに適用されます。</li>
           <li>上位スキルの「下位込みSP」は、下位スキルそれぞれに設定したヒントLvで割引したSPを合計します。下位スキルのヒントLvを変えると、上位スキルの下位込みSPにも反映されます。</li>
@@ -242,7 +243,7 @@
           <li>スキル説明の ＜中距離/長距離＞ のように <b>/</b> で区切られた条件は<b>良い方の適性</b>を使い、＜先行・中距離＞ のように <b>・</b> で区切られた条件は<b>両方の倍率を乗算</b>します。初期値はすべてAです。</li>
           <li><b>固有</b>スキルは「固有Lv × 170」で計算し、適性倍率は適用しません（固有Lvは「査定設定」で1〜6）。<b>ゲームデータを取得すると、取得済み固有スキルのLvが自動で反映されます。</b><b>継承固有</b>は一律180です。</li>
           <li><b>進化</b>スキルは通常スキルと同じく適性倍率を適用します。</li>
-          <li><b>ウマ娘</b>を選ぶと、そのカードの距離適性・脚質適性を「査定設定」に自動反映します。芝・ダート適性は表示のみで、評価点倍率には影響しません。「初期適性に戻す」で再適用できます。</li>
+          <li><b>ウマ娘</b>を選ぶと、そのカードの距離適性・脚質適性を「査定設定」に自動反映します。芝・ダート適性は表示のみで、評価点倍率には影響しません。「<b>適性リセット</b>」で選択中のウマ娘の初期適性に再設定できます（未選択時は距離・脚質をすべてAに戻します）。</li>
           <li><b>ゲームデータ</b>を取得すると、<b>カードの初期スキル（ヒントLv0）</b>と<b>ヒントを取得したスキル</b>を自動で選択します。初期スキルは<b>覚醒Lvに応じて3〜7件</b>で、現在の覚醒Lv（<code>talent_level</code>）以下の必要覚醒Lvのものだけを選びます。ゲーム内で購入できるのはこの2種類で、すべてのノーマル/レアが最初から買えるわけではありません。取得済みスキルは選択から外します。<b>継承固有</b>は親から継承したものだけが取得可能で、パケットから継承元を判別できないため自動選択の対象外です（必要なら手動でチェックしてください）。</li>
           <li><b>適性フィルタ</b>は距離・馬場・脚質のチップで絞り込みます。スキルの適性条件のうち<b>いずれか1つでも一致</b>すれば表示します（例: ＜短距離・芝＞ は短距離または芝のどちらかで表示）。「汎用を含む」をオフにすると、適性条件のないスキルを除外します。</li>
           <li><b>効果カテゴリ</b>は「速度」「加速」「回復」「緑」「デバフ」「位置取り」「視野」「ゲート」などのチップで絞り込みます。主効果（<code>ability_type_1_1</code>）で分類し、複数効果があるスキルは最初の効果を使います。</li>

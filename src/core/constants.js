@@ -91,6 +91,7 @@ export const DERIVED_KEYS = {
   total_sp: '_total_sp',
   efficiency: '_efficiency',
   total_efficiency: '_total_efficiency',
+  hint: '_hint',
 };
 
 // ゲームデータ取得（パケット転送サーバー）
