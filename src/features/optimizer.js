@@ -152,6 +152,21 @@ function displayHint(s) {
   return s._hint || 0;
 }
 
+// 進化元に対する増分。進化先を選ぶときの比較に使う。
+function evolutionGain(s, mode) {
+  if (s._evolution_base == null) return null;
+  const base = byId.get(s._evolution_base);
+  if (!base) return null;
+  if (mode === 'skillTest') {
+    return (
+      s._eval +
+      skillTestBonus(s.type) -
+      (base._eval + skillTestBonus(base.type))
+    );
+  }
+  return s._eval - base._eval;
+}
+
 // スキル1つの価値。技能試験では評価点＋獲得ボーナスから、
 // 取得済みの下位スキル分を差し引いた増分にする。
 function packageValue(s, mode) {
@@ -179,6 +194,20 @@ function optimizeSkills(budget, mode) {
   const candidates = optimizerCandidates();
   if (!candidates.length) return null;
 
+  // シナリオ進化は1回の育成で最大2個まで。
+  const scenarioEvolutionIds = new Set(
+    (SCENARIO_EVOLUTIONS[String(state.scenarioId)] || []).map((e) => e.skill_id)
+  );
+  const learnedScenarioEvolutions = [...state.learnedSkillIds].filter((id) =>
+    scenarioEvolutionIds.has(id)
+  ).length;
+  const hasScenarioEvolutionCandidate = candidates.some((s) =>
+    scenarioEvolutionIds.has(s.skill_id)
+  );
+  const scenarioEvolutionLimit = hasScenarioEvolutionCandidate
+    ? Math.max(0, 2 - learnedScenarioEvolutions)
+    : 0;
+
   const valuesBySkill = new Map();
   for (const s of candidates) valuesBySkill.set(s.skill_id, packageValue(s, mode));
 
@@ -195,66 +224,91 @@ function optimizeSkills(budget, mode) {
     0
   );
   const maxBudget = Math.max(0, Math.min(Math.floor(budget), OPT_MAX_BUDGET, sumMax));
-  const dp = new Float64Array(maxBudget + 1).fill(-Infinity);
-  const efficiencyDp = new Float64Array(maxBudget + 1).fill(-Infinity);
-  dp[0] = 0;
-  efficiencyDp[0] = 0;
+
+  // dp[選んだシナリオ進化の数][SP] の2次元DP。
+  const layers = scenarioEvolutionLimit + 1;
+  const dp = Array.from({ length: layers }, () =>
+    new Float64Array(maxBudget + 1).fill(-Infinity)
+  );
+  const efficiencyDp = Array.from({ length: layers }, () =>
+    new Float64Array(maxBudget + 1).fill(-Infinity)
+  );
+  dp[0][0] = 0;
+  efficiencyDp[0][0] = 0;
 
   const choices = [];
   for (const packages of groupList) {
     const costs = packages.map((p) => p._total_sp);
     const values = packages.map((p) => valuesBySkill.get(p.skill_id) ?? 0);
     const efficiencies = packages.map((p, i) => packageEfficiency(p, mode, values[i]));
-    const choice = new Int16Array(maxBudget + 1).fill(-1);
-    for (let b = maxBudget; b >= 0; b--) {
-      let best = dp[b];
-      let bestEfficiency = efficiencyDp[b];
-      let bestIdx = -1;
-      for (let i = 0; i < packages.length; i++) {
-        const cost = costs[i];
-        if (cost > b) continue;
-        const prev = dp[b - cost];
-        if (prev === -Infinity) continue;
-        const value = prev + values[i];
-        const efficiency = efficiencyDp[b - cost] + efficiencies[i];
-        const betterValue = value > best;
-        const betterEfficiency = value === best && efficiency > bestEfficiency + 1e-9;
-        const cheaperTie =
-          value === best &&
-          Math.abs(efficiency - bestEfficiency) <= 1e-9 &&
-          bestIdx !== -1 &&
-          cost < costs[bestIdx];
-        if (betterValue || betterEfficiency || cheaperTie) {
-          best = value;
-          bestEfficiency = efficiency;
-          bestIdx = i;
+    const isScenarioEvolution = packages.map((p) =>
+      scenarioEvolutionIds.has(p.skill_id)
+    );
+    const groupChoices = Array.from({ length: layers }, () =>
+      new Int16Array(maxBudget + 1).fill(-1)
+    );
+    for (let k = scenarioEvolutionLimit; k >= 0; k--) {
+      const dpLayer = dp[k];
+      const efficiencyLayer = efficiencyDp[k];
+      const choiceLayer = groupChoices[k];
+      for (let b = maxBudget; b >= 0; b--) {
+        let best = dpLayer[b];
+        let bestEfficiency = efficiencyLayer[b];
+        let bestIdx = -1;
+        for (let i = 0; i < packages.length; i++) {
+          const cost = costs[i];
+          if (cost > b) continue;
+          const need = isScenarioEvolution[i] ? 1 : 0;
+          if (k < need) continue;
+          const prev = dp[k - need][b - cost];
+          if (prev === -Infinity) continue;
+          const value = prev + values[i];
+          const efficiency = efficiencyDp[k - need][b - cost] + efficiencies[i];
+          const betterValue = value > best;
+          const betterEfficiency = value === best && efficiency > bestEfficiency + 1e-9;
+          const cheaperTie =
+            value === best &&
+            Math.abs(efficiency - bestEfficiency) <= 1e-9 &&
+            bestIdx !== -1 &&
+            cost < costs[bestIdx];
+          if (betterValue || betterEfficiency || cheaperTie) {
+            best = value;
+            bestEfficiency = efficiency;
+            bestIdx = i;
+          }
         }
+        dpLayer[b] = best;
+        efficiencyLayer[b] = bestEfficiency;
+        choiceLayer[b] = bestIdx;
       }
-      dp[b] = best;
-      efficiencyDp[b] = bestEfficiency;
-      choice[b] = bestIdx;
     }
-    choices.push(choice);
+    choices.push(groupChoices);
   }
 
+  let bestK = 0;
   let bestBudget = -1;
   let bestValue = -Infinity;
   for (let b = 0; b <= maxBudget; b++) {
-    if (dp[b] > bestValue) {
-      bestValue = dp[b];
-      bestBudget = b;
+    for (let k = 0; k <= scenarioEvolutionLimit; k++) {
+      if (dp[k][b] > bestValue) {
+        bestValue = dp[k][b];
+        bestBudget = b;
+        bestK = k;
+      }
     }
   }
   if (bestBudget < 0 || bestValue === -Infinity) return null;
 
   const chosen = [];
   let b = bestBudget;
+  let k = bestK;
   for (let g = groupList.length - 1; g >= 0; g--) {
-    const idx = choices[g][b];
+    const idx = choices[g][k][b];
     if (idx >= 0) {
       const skill = groupList[g][idx];
       chosen.push(skill);
       b -= skill._total_sp;
+      if (scenarioEvolutionIds.has(skill.skill_id)) k -= 1;
     }
   }
   // 結果はヒントLvの高い順。同じLv内は効率の高い順。
@@ -277,6 +331,9 @@ function optimizeSkills(budget, mode) {
     efficiency: bestBudget > 0 ? bestValue / bestBudget : null,
     candidates: candidates.length,
     groups: groupList.length,
+    scenarioEvolutions: chosen.filter((s) => scenarioEvolutionIds.has(s.skill_id)).length,
+    scenarioEvolutionLimit,
+    learnedScenarioEvolutions,
     budget: Math.floor(budget),
     capped: budget > OPT_MAX_BUDGET,
   };
@@ -317,6 +374,10 @@ export function runOptimization() {
         const baseValue = base ? base._eval + skillTestBonus(base.type) : 0;
         const bonus = skillTestBonus(s.type);
         const gain = s._eval + bonus - baseValue;
+        const evoGain = evolutionGain(s, 'skillTest');
+        const gainLabel = evoGain != null
+          ? `進化 +${formatNumber(evoGain)}`
+          : `増分 ${formatNumber(gain)}`;
         evalTotal += s._eval;
         bonusTotal += bonus;
         ownedTotal += baseValue;
@@ -324,7 +385,7 @@ export function runOptimization() {
           `<li>${escapeHtml(s.name)}` +
           `<span class="opt-meta">ヒントLv ${displayHint(s)}` +
           ` / SP ${formatNumber(s._total_sp)} / 評価 ${formatNumber(s._eval)}` +
-          ` / ボーナス ${formatNumber(bonus)} / 増分 ${formatNumber(gain)}</span></li>`
+          ` / ボーナス ${formatNumber(bonus)} / ${gainLabel}</span></li>`
         );
       })
       .join('');
@@ -337,7 +398,10 @@ export function runOptimization() {
       ` = <b>${formatNumber(result.totalValue)}</b>。基礎能力ボーナスは含みません。</div>` +
       `<div class="opt-note">系統ごとに最上位1個の獲得ボーナスを加算し、` +
       `取得済みの下位スキル分は増分で計算しています。` +
+      `進化は進化元に対する増分が最大のものを選びます。` +
       `ヒントLvの高い順に表示（同じLv内は効率順）。</div>` +
+      `<div class="opt-note">シナリオ進化は最大2個まで（選択 ` +
+      `${formatNumber(result.learnedScenarioEvolutions + result.scenarioEvolutions)}/2）。</div>` +
       `<div class="opt-note">対象 ${formatNumber(result.candidates)} スキル` +
       `（${formatNumber(result.groups)} グループ）・計算 ${elapsed.toFixed(0)}ms` +
       (result.capped ? `・予算上限 ${formatNumber(OPT_MAX_BUDGET)}SP` : '') +
@@ -350,11 +414,13 @@ export function runOptimization() {
     .map((s) => {
       const upgradeEff = s._efficiency == null ? '—' : s._efficiency.toFixed(2);
       const totalEff = s._total_efficiency == null ? '—' : s._total_efficiency.toFixed(2);
+      const evoGain = evolutionGain(s, 'eval');
+      const evoText = evoGain != null ? ` / 進化 +${formatNumber(evoGain)}` : '';
       return (
         `<li>${escapeHtml(s.name)}` +
         `<span class="opt-meta">ヒントLv ${displayHint(s)}` +
         ` / SP ${formatNumber(s._total_sp)} / 評価 ${formatNumber(s._eval)}` +
-        ` / 上昇効率 ${upgradeEff} / 総合効率 ${totalEff}</span></li>`
+        ` / 上昇効率 ${upgradeEff} / 総合効率 ${totalEff}${evoText}</span></li>`
       );
     })
     .join('');
@@ -362,7 +428,10 @@ export function runOptimization() {
     `<div class="opt-summary">最大評価点 <b>${formatNumber(result.totalValue)}</b> ／ ` +
     `合計SP <b>${formatNumber(result.totalSp)}</b> ／ 評価効率 <b>${efficiency}</b></div>` +
     `<div class="opt-note">ヒントLvの高い順に表示（同じLv内は上昇効率の高い順）。` +
-    `同評価・同SPの組み合わせでは、上昇効率の合計が高いものを優先しています。</div>` +
+    `同評価・同SPの組み合わせでは、上昇効率の合計が高いものを優先しています。` +
+    `進化は進化元に対する増分が最大のものを選びます。</div>` +
+    `<div class="opt-note">シナリオ進化は最大2個まで（選択 ` +
+    `${formatNumber(result.learnedScenarioEvolutions + result.scenarioEvolutions)}/2）。</div>` +
     `<div class="opt-note">対象 ${formatNumber(result.candidates)} スキル` +
     `（${formatNumber(result.groups)} グループ）・計算 ${elapsed.toFixed(0)}ms` +
     (result.capped ? `・予算上限 ${formatNumber(OPT_MAX_BUDGET)}SP` : '') +
