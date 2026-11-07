@@ -377,6 +377,29 @@ def load_card_initial_skill_ranks(con: sqlite3.Connection) -> dict[int, dict[int
     return dict(out)
 
 
+def load_succession_evolutions(con: sqlite3.Connection, now: int) -> list[dict]:
+    """継承固有スキル → 継承進化スキルの対応（開始日が来ているもの）。"""
+    out: list[dict] = []
+    for r in con.execute(
+        """
+        SELECT base_skill_id, skill_id, card_id, start_date
+        FROM skill_upgrade_succession_skill
+        ORDER BY base_skill_id, skill_id
+        """
+    ):
+        start_date = int(r["start_date"] or 0)
+        if start_date and start_date > now:
+            continue
+        out.append(
+            {
+                "base_skill_id": int(r["base_skill_id"]),
+                "skill_id": int(r["skill_id"]),
+                "card_id": int(r["card_id"] or 0),
+            }
+        )
+    return out
+
+
 def load_card_gold_skill_evolutions(con: sqlite3.Connection) -> dict[int, list[dict]]:
     """カードの金スキル → カード固有の進化スキル（skill_upgrade_description）。
 
@@ -561,6 +584,7 @@ def write_js(
     card_initial_skills: dict[int, list[int]],
     card_initial_skill_ranks: dict[int, dict[int, int]],
     card_gold_skill_evolutions: dict[int, list[dict]],
+    succession_evolutions: list[dict],
     scenarios: list[dict],
     scenario_evolutions: dict[int, list[dict]],
 ) -> None:
@@ -576,6 +600,7 @@ def write_js(
                 "cardInitialSkills": card_initial_skills,
                 "cardInitialSkillRanks": card_initial_skill_ranks,
                 "cardGoldSkillEvolutions": card_gold_skill_evolutions,
+                "successionEvolutions": succession_evolutions,
                 "scenarios": scenarios,
                 "scenarioEvolutions": scenario_evolutions,
             },
@@ -644,6 +669,7 @@ def main() -> int:
     card_initial_skills = load_card_initial_skills(con)
     card_initial_skill_ranks = load_card_initial_skill_ranks(con)
     card_gold_skill_evolutions = load_card_gold_skill_evolutions(con)
+    succession_evolutions = load_succession_evolutions(con, now)
     scenarios = load_scenarios(con)
     scenario_evolutions = load_scenario_evolutions(con)
     con.close()
@@ -679,6 +705,7 @@ def main() -> int:
         card_initial_skills,
         card_initial_skill_ranks,
         card_gold_skill_evolutions,
+        succession_evolutions,
         scenarios,
         scenario_evolutions,
     )

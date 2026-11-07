@@ -45,6 +45,7 @@ export const state = {
   includeGeneral: true,
   optBudget: 1200,
   optUseFilter: true,
+  optMode: 'eval',
   ocrFastMode: true,
   ocrAutoCrop: true,
   ocrSensitivity: 'medium',
@@ -149,6 +150,7 @@ export function loadSettings() {
       state.optBudget = Math.min(OPT_MAX_BUDGET, Math.floor(budget));
     }
     if (typeof saved.optUseFilter === 'boolean') state.optUseFilter = saved.optUseFilter;
+    if (saved.optMode === 'eval' || saved.optMode === 'skillTest') state.optMode = saved.optMode;
     if (typeof saved.ocrFastMode === 'boolean') state.ocrFastMode = saved.ocrFastMode;
     if (typeof saved.ocrAutoCrop === 'boolean') state.ocrAutoCrop = saved.ocrAutoCrop;
     if (saved.ocrSensitivity === 'high' || saved.ocrSensitivity === 'medium' || saved.ocrSensitivity === 'low') {
@@ -180,6 +182,7 @@ export function saveSettings() {
       includeGeneral: state.includeGeneral,
       optBudget: state.optBudget,
       optUseFilter: state.optUseFilter,
+      optMode: state.optMode,
       ocrFastMode: state.ocrFastMode,
       ocrAutoCrop: state.ocrAutoCrop,
       ocrSensitivity: state.ocrSensitivity,

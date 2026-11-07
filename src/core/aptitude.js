@@ -139,6 +139,12 @@ export function recomputeDerived() {
         prereqSpBase = basePrereqSpBase;
         totalSp = baseSp == null ? null : baseSp + basePrereqSp;
         totalSpBase = baseSp == null ? null : (Number(base.sp) || 0) + basePrereqSpBase;
+        // 進化元の金スキルを取得済みなら、進化分のSPは追加でかからない。
+        if (state.learnedSkillIds.has(base.skill_id)) {
+          sp = 0;
+          totalSp = basePrereqSp;
+          totalSpBase = basePrereqSpBase;
+        }
         evolutionBaseTotalSp = totalSpBase;
         prereqEval = base._eval;
       }

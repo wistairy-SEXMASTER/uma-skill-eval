@@ -71,6 +71,19 @@ export const DILIGENT_DISCOUNT = 0.04; // 勉強家（切れ者と同時の場�
 export const UNIQUE_POINT_PER_LEVEL = 170; // 本体固有スキル: 固有Lv × 170
 export const INHERIT_UNIQUE_POINT = 180;   // 継承固有スキル: 一律180
 
+// 技能試験（フリー課程）のスキル獲得ボーナス。
+// 系統ごとに最上位1個だけが加算される。継承固有はノーマル扱い。
+export const SKILL_TEST_BONUS = {
+  'ノーマル': 400,
+  'レア': 1200,
+  '進化': 1500,
+  '継承固有': 400,
+};
+
+export function skillTestBonus(type) {
+  return SKILL_TEST_BONUS[type] || 0;
+}
+
 export const DERIVED_KEYS = {
   eval_point: '_eval',
   upgrade_point: '_upgrade_point',

@@ -9,6 +9,9 @@ export const META = DATA.meta || {};
 export const CARD_INITIAL_SKILLS = DATA.cardInitialSkills || {};
 export const CARD_INITIAL_SKILL_RANKS = DATA.cardInitialSkillRanks || {};
 export const CARD_GOLD_SKILL_EVOLUTIONS = DATA.cardGoldSkillEvolutions || {};
+export const SUCCESSION_EVOLUTIONS = Array.isArray(DATA.successionEvolutions)
+  ? DATA.successionEvolutions
+  : [];
 export const SCENARIOS = Array.isArray(DATA.scenarios) ? DATA.scenarios : [];
 export const SCENARIO_EVOLUTIONS = DATA.scenarioEvolutions || {};
 
@@ -32,6 +35,18 @@ for (const entries of Object.values(SCENARIO_EVOLUTIONS)) {
     if (!list.includes(entry.skill_id)) list.push(entry.skill_id);
     ALL_EVOLUTIONS_BY_BASE.set(entry.base_skill_id, list);
   }
+}
+
+// 継承固有 → 継承進化
+export const SUCCESSION_EVOLUTIONS_BY_BASE = new Map();
+for (const entry of SUCCESSION_EVOLUTIONS) {
+  EVOLUTION_BASE_MAP.set(entry.skill_id, entry.base_skill_id);
+  const all = ALL_EVOLUTIONS_BY_BASE.get(entry.base_skill_id) || [];
+  if (!all.includes(entry.skill_id)) all.push(entry.skill_id);
+  ALL_EVOLUTIONS_BY_BASE.set(entry.base_skill_id, all);
+  const succession = SUCCESSION_EVOLUTIONS_BY_BASE.get(entry.base_skill_id) || [];
+  if (!succession.includes(entry.skill_id)) succession.push(entry.skill_id);
+  SUCCESSION_EVOLUTIONS_BY_BASE.set(entry.base_skill_id, succession);
 }
 
 export const byId = new Map(SKILLS.map((s) => [s.skill_id, s]));

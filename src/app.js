@@ -268,6 +268,12 @@ function bind() {
     invalidateOptimization();
   });
 
+  $('optMode').addEventListener('change', (e) => {
+    state.optMode = e.target.value === 'skillTest' ? 'skillTest' : 'eval';
+    saveSettings();
+    invalidateOptimization();
+  });
+
   $('btnOptimize').addEventListener('click', runOptimization);
   $('btnApplyOpt').addEventListener('click', applyOptimizationResult);
 
@@ -460,6 +466,7 @@ export function init() {
   $('optBudget').value = String(state.optBudget);
   $('optUseFilter').checked = state.optUseFilter;
   $('optUseFilter-wrap').classList.toggle('on', state.optUseFilter);
+  $('optMode').value = state.optMode;
   bind();
   updateStickyOffset();
   render();
