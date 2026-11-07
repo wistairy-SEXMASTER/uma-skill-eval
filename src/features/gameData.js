@@ -92,21 +92,16 @@ function statusText(payload, card, hintCount, warnings) {
   return bits.join(' / ');
 }
 
-// 取得したデータを state に反映する。手動設定よりゲーム内の値を優先する。
-export function applyGameData(payload) {
-  const chara = payload && payload.chara;
-  if (!chara) throw new Error('育成データがありません。');
-
-  const previousCardId = state.cardId;
-  const warnings = [];
-  const learnedSkillIds = new Set(
+function collectLearnedSkillIds(chara) {
+  return new Set(
     (chara.learned_skills || [])
       .map((skill) => Number(skill && skill.skill_id))
       .filter((id) => Number.isInteger(id))
   );
-  state.learnedSkillIds = learnedSkillIds;
+}
 
-  // 取得済みの固有スキルのLvを査定設定へ反映する。
+// 取得済みの固有スキルのLvを査定設定へ反映する。
+function applyUniqueLevel(chara) {
   for (const skill of chara.learned_skills || []) {
     const unique = byId.get(Number(skill && skill.skill_id));
     if (!unique || unique.type !== '固有') continue;
@@ -114,20 +109,25 @@ export function applyGameData(payload) {
     if (Number.isInteger(level) && level >= 1 && level <= 6) {
       state.uniqueLevel = level;
     }
-    break;
+    return;
   }
+}
 
+function applyCard(chara, warnings) {
   const card = cardsById.get(Number(chara.card_id));
-  if (card) {
-    state.cardId = card.card_id;
-    applyCardAptitudes(card);
-    const cardSelect = $('cardSelect');
-    if (cardSelect) cardSelect.value = String(card.card_id);
-  } else {
+  if (!card) {
     warnings.push(`カード ${chara.card_id} がDBにありません`);
+    return null;
   }
+  state.cardId = card.card_id;
+  applyCardAptitudes(card);
+  const cardSelect = $('cardSelect');
+  if (cardSelect) cardSelect.value = String(card.card_id);
+  return card;
+}
 
-  // ゲーム内の適性（継承込み）で上書きする。
+// ゲーム内の適性（継承込み）で上書きする。
+function applyAptitudes(chara) {
   const distance = chara.aptitude && chara.aptitude.distance;
   const style = chara.aptitude && chara.aptitude.style;
   for (const id of ['1', '2', '3', '4']) {
@@ -138,41 +138,52 @@ export function applyGameData(payload) {
       state.aptitude.style[id] = String(style[id]).toUpperCase();
     }
   }
+}
 
+function applyScenario(chara) {
   const scenarioId = Number(chara.scenario_id);
   if (Number.isInteger(scenarioId) && SCENARIOS.some((s) => s.id === scenarioId)) {
     state.scenarioId = scenarioId;
   }
+  const scenarioSelect = $('scenarioSelect');
+  if (scenarioSelect) {
+    scenarioSelect.value = state.scenarioId != null ? String(state.scenarioId) : '';
+  }
+}
 
-  // ヒントは (group_id, rarity) 単位。同組のスキルすべてに同じLvを適用する。
+// ヒントは (group_id, rarity) 単位。同組のスキルすべてに同じLvを適用する。
+function applyHints(chara, warnings) {
   const hintPairs = new Set();
   const hintedSkillIds = new Set();
-  if (chara.has_hints !== false) {
-    state.hintLevels.clear();
-    for (const hint of chara.hints || []) {
-      const level = Number(hint.level) || 0;
-      if (level <= 0) continue;
-      const groupId = Number(hint.group_id);
-      const rarity = Number(hint.rarity);
-      hintPairs.add(`${groupId}:${rarity}`);
-      for (const skill of SKILLS) {
-        if (
-          skill.group_id === groupId &&
-          skill.rarity === rarity &&
-          skill.group_rate >= 0
-        ) {
-          state.hintLevels.set(skill.skill_id, level);
-          hintedSkillIds.add(skill.skill_id);
-        }
+  if (chara.has_hints === false) {
+    warnings.push('ヒント情報なし');
+    return { hintPairs, hintedSkillIds };
+  }
+  state.hintLevels.clear();
+  for (const hint of chara.hints || []) {
+    const level = Number(hint.level) || 0;
+    if (level <= 0) continue;
+    const groupId = Number(hint.group_id);
+    const rarity = Number(hint.rarity);
+    hintPairs.add(`${groupId}:${rarity}`);
+    for (const skill of SKILLS) {
+      if (
+        skill.group_id === groupId &&
+        skill.rarity === rarity &&
+        skill.group_rate >= 0
+      ) {
+        state.hintLevels.set(skill.skill_id, level);
+        hintedSkillIds.add(skill.skill_id);
       }
     }
-  } else {
-    warnings.push('ヒント情報なし');
   }
+  return { hintPairs, hintedSkillIds };
+}
 
-  // 別の育成に切り替わった場合だけ、前回の選択をリセットする。
-  // 同じ育成の再取得では手動選択を残し、初期スキル・ヒントのあるスキルを
-  // 追加でチェックする。
+// 別の育成に切り替わった場合だけ、前回の選択をリセットする。
+// 同じ育成の再取得では手動選択を残し、初期スキル・ヒントのあるスキルを
+// 追加でチェックする。
+function applySelection(chara, previousCardId, learnedSkillIds, hintedSkillIds) {
   if (previousCardId !== Number(chara.card_id)) {
     state.selected.clear();
   }
@@ -188,23 +199,41 @@ export function applyGameData(payload) {
     state.selected.delete(skillId);
   }
   saveSelection();
+}
 
+function applyEffects(chara) {
   const effects = new Set((chara.effects || []).map(Number));
   state.fastLearner = effects.has(7);
   state.diligent = !state.fastLearner && effects.has(40);
+}
 
-  // 現在のスキルポイントを「獲得SP」に反映する。
+// 現在のスキルポイントを「獲得SP」に反映する。
+function applyBudget(chara) {
   const skillPoint = Number(chara.skill_point);
-  if (Number.isInteger(skillPoint) && skillPoint >= 0) {
-    state.optBudget = Math.min(OPT_MAX_BUDGET, skillPoint);
-    const budgetInput = $('optBudget');
-    if (budgetInput) budgetInput.value = String(state.optBudget);
-  }
+  if (!Number.isInteger(skillPoint) || skillPoint < 0) return;
+  state.optBudget = Math.min(OPT_MAX_BUDGET, skillPoint);
+  const budgetInput = $('optBudget');
+  if (budgetInput) budgetInput.value = String(state.optBudget);
+}
 
-  const scenarioSelect = $('scenarioSelect');
-  if (scenarioSelect) {
-    scenarioSelect.value = state.scenarioId != null ? String(state.scenarioId) : '';
-  }
+// 取得したデータを state に反映する。手動設定よりゲーム内の値を優先する。
+export function applyGameData(payload) {
+  const chara = payload && payload.chara;
+  if (!chara) throw new Error('育成データがありません。');
+
+  const previousCardId = state.cardId;
+  const warnings = [];
+  const learnedSkillIds = collectLearnedSkillIds(chara);
+  state.learnedSkillIds = learnedSkillIds;
+
+  applyUniqueLevel(chara);
+  const card = applyCard(chara, warnings);
+  applyAptitudes(chara);
+  applyScenario(chara);
+  const { hintPairs, hintedSkillIds } = applyHints(chara, warnings);
+  applySelection(chara, previousCardId, learnedSkillIds, hintedSkillIds);
+  applyEffects(chara);
+  applyBudget(chara);
 
   saveSettings();
   saveHint();

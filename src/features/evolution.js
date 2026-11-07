@@ -147,8 +147,9 @@ export function renderScenarioEvolution() {
       `<span class="scenario-evo-skill">${escapeHtml(evo.name)}</span>` +
       `<span class="scenario-evo-meta">評価 ${formatNumber(evo._eval)} / ${baseSp}</span>` +
       `<button class="btn tiny scenario-evo-btn${selected ? ' active' : ''}" type="button" ` +
+        `title="${selected ? 'クリックで選択を解除' : 'この進化スキルを選択'}" ` +
         `data-scenario-evo-base="${e.base_skill_id}" data-scenario-evo-select="${e.skill_id}">` +
-        `${selected ? '選択済み' : '選択'}</button>` +
+        `${selected ? '解除' : '選択'}</button>` +
       `</div>`;
   }).join('');
   list.innerHTML = items || '<div class="scenario-evo-empty">進化スキルがありません。</div>';

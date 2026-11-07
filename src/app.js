@@ -229,7 +229,9 @@ function bind() {
     const baseId = Number(btn.dataset.scenarioEvoBase);
     const selectId = Number(btn.dataset.scenarioEvoSelect);
     if (!byId.has(baseId) || !byId.has(selectId)) return;
-    selectEvolutionOption(baseId, selectId);
+    // 選択済みの場合は解除する。
+    const alreadySelected = state.selected.has(selectId);
+    selectEvolutionOption(baseId, alreadySelected ? null : selectId);
   });
 
   $('aptFilter').addEventListener('click', (e) => {

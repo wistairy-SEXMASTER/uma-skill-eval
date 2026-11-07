@@ -17,36 +17,36 @@ export const SCENARIO_EVOLUTIONS = DATA.scenarioEvolutions || {};
 
 // 進化スキル → 進化元の金スキル
 export const EVOLUTION_BASE_MAP = new Map();
-// 進化元の金スキル → 進化先スキルID一覧（カード固有 + シナリオ）
+// 進化元の金スキル → 進化先スキルID一覧（カード固有 + シナリオ + 継承）
 export const ALL_EVOLUTIONS_BY_BASE = new Map();
+// 継承固有 → 継承進化
+export const SUCCESSION_EVOLUTIONS_BY_BASE = new Map();
+
+function registerEvolution(baseId, skillId, { succession = false } = {}) {
+  EVOLUTION_BASE_MAP.set(skillId, baseId);
+
+  const all = ALL_EVOLUTIONS_BY_BASE.get(baseId) || [];
+  if (!all.includes(skillId)) all.push(skillId);
+  ALL_EVOLUTIONS_BY_BASE.set(baseId, all);
+
+  if (!succession) return;
+  const list = SUCCESSION_EVOLUTIONS_BY_BASE.get(baseId) || [];
+  if (!list.includes(skillId)) list.push(skillId);
+  SUCCESSION_EVOLUTIONS_BY_BASE.set(baseId, list);
+}
 
 for (const entries of Object.values(CARD_GOLD_SKILL_EVOLUTIONS)) {
   for (const entry of entries) {
-    EVOLUTION_BASE_MAP.set(entry.skill_id, entry.base_skill_id);
-    const list = ALL_EVOLUTIONS_BY_BASE.get(entry.base_skill_id) || [];
-    if (!list.includes(entry.skill_id)) list.push(entry.skill_id);
-    ALL_EVOLUTIONS_BY_BASE.set(entry.base_skill_id, list);
+    registerEvolution(entry.base_skill_id, entry.skill_id);
   }
 }
 for (const entries of Object.values(SCENARIO_EVOLUTIONS)) {
   for (const entry of entries) {
-    EVOLUTION_BASE_MAP.set(entry.skill_id, entry.base_skill_id);
-    const list = ALL_EVOLUTIONS_BY_BASE.get(entry.base_skill_id) || [];
-    if (!list.includes(entry.skill_id)) list.push(entry.skill_id);
-    ALL_EVOLUTIONS_BY_BASE.set(entry.base_skill_id, list);
+    registerEvolution(entry.base_skill_id, entry.skill_id);
   }
 }
-
-// 継承固有 → 継承進化
-export const SUCCESSION_EVOLUTIONS_BY_BASE = new Map();
 for (const entry of SUCCESSION_EVOLUTIONS) {
-  EVOLUTION_BASE_MAP.set(entry.skill_id, entry.base_skill_id);
-  const all = ALL_EVOLUTIONS_BY_BASE.get(entry.base_skill_id) || [];
-  if (!all.includes(entry.skill_id)) all.push(entry.skill_id);
-  ALL_EVOLUTIONS_BY_BASE.set(entry.base_skill_id, all);
-  const succession = SUCCESSION_EVOLUTIONS_BY_BASE.get(entry.base_skill_id) || [];
-  if (!succession.includes(entry.skill_id)) succession.push(entry.skill_id);
-  SUCCESSION_EVOLUTIONS_BY_BASE.set(entry.base_skill_id, succession);
+  registerEvolution(entry.base_skill_id, entry.skill_id, { succession: true });
 }
 
 export const byId = new Map(SKILLS.map((s) => [s.skill_id, s]));
